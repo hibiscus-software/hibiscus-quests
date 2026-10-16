@@ -22,6 +22,8 @@ date. How to cut a release is in [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-16
+
 ### Changed
 
 - **Runs on every NeoForge 26.3 build**, from 26.3.0.0-beta to the newest; it needed 26.3.0.84 or later before. On
@@ -121,5 +123,6 @@ The first release. Needs Hibiscus Lib 1.4.0 or newer; Hibiscus Teams is optional
 - **A demo book** as a built-in data pack, off unless switched on with `/datapack enable`: a tour of every shape and
   state, and a chapter per kind of task and reward.
 
-[Unreleased]: https://github.com/hibiscus-software/hibiscus-quests/compare/v1.0.0+26.3...HEAD
+[Unreleased]: https://github.com/hibiscus-software/hibiscus-quests/compare/v1.0.1+26.3...HEAD
+[1.0.1]: https://github.com/hibiscus-software/hibiscus-quests/compare/v1.0.0+26.3...v1.0.1+26.3
 [1.0.0]: https://github.com/hibiscus-software/hibiscus-quests/commits/v1.0.0+26.3
