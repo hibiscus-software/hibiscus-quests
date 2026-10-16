@@ -1,0 +1,12 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "hibiscusquests:item/loot_crate",
+    "tints": [
+      {
+        "type": "minecraft:dye",
+        "default": -1527733
+      }
+    ]
+  }
+}

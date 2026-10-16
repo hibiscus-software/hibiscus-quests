@@ -7,35 +7,44 @@
 package software.hibiscus.hibiscusquests.screenshots;
 
 import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
 
 import org.jspecify.annotations.Nullable;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.MouseHandler;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.presets.WorldPresets;
+import net.minecraft.world.level.storage.LevelStorageSource;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import software.hibiscus.hibiscusquests.HibiscusQuests;
+import software.hibiscus.hibiscusquests.QuestItems;
 import software.hibiscus.hibiscusquests.api.QuestRef;
 import software.hibiscus.hibiscusquests.book.BookManager;
 import software.hibiscus.hibiscusquests.book.Chapter;
 import software.hibiscus.hibiscusquests.book.Quest;
 import software.hibiscus.hibiscusquests.client.screen.QuestBookScreen;
+import software.hibiscus.hibiscusquests.item.LootCrateItem;
 import software.hibiscus.hibiscusquests.progress.ProgressManager;
 import software.hibiscus.hibiscusquests.progress.QuestTeams;
 
@@ -49,6 +58,7 @@ public final class ScreenshotHarness {
     private static final boolean ENABLED = Boolean.getBoolean("hibiscusquests.screenshots");
     private static final String WORLD = "hibiscusquests_screenshots";
     private static final String TOUR = "demo_tour";
+    private static final String WORLD_CHAPTER = "demo_world";
 
     private record Step(Runnable action, int waitTicks, @Nullable String shot) {}
 
@@ -84,6 +94,8 @@ public final class ScreenshotHarness {
         }
         if (!planned) {
             planned = true;
+            // The harness's window may not have focus: don't open the pause menu over the shots.
+            minecraft.options.pauseOnLostFocus = false;
             minecraft.options.tutorialStep = net.minecraft.client.tutorial.TutorialSteps.NONE;
             minecraft.getTutorial().setStep(net.minecraft.client.tutorial.TutorialSteps.NONE);
             plan(minecraft);
@@ -109,9 +121,14 @@ public final class ScreenshotHarness {
     }
 
     private static void openWorld(Minecraft minecraft) {
+        // A fresh world each run: opening an old one can stop on a notice (a mod's version changed, say) the harness
+        // can't answer, and the pictures should be the same every time.
         if (minecraft.getLevelSource().levelExists(WORLD)) {
-            minecraft.createWorldOpenFlows().openWorld(WORLD, () -> minecraft.gui.setScreen(new TitleScreen()));
-            return;
+            try (LevelStorageSource.LevelStorageAccess access = minecraft.getLevelSource().createAccess(WORLD)) {
+                access.deleteLevel();
+            } catch (IOException e) {
+                HibiscusQuests.LOGGER.warn("Screenshot harness: can't delete the old world", e);
+            }
         }
         LevelSettings settings = new LevelSettings(WORLD, GameType.CREATIVE,
                 LevelSettings.DifficultySettings.DEFAULT, true, WorldDataConfiguration.DEFAULT);
@@ -172,6 +189,22 @@ public final class ScreenshotHarness {
             ProgressManager.setTaskProgress(team, gold, gold.task("gold").orElseThrow(), 1, player);
         }
         complete(team, player, "demo_other", "read_me");
+        // Out in the World: Night Watch done (its choice waiting), a few quests under way and pinned to the screen.
+        complete(team, player, WORLD_CHAPTER, "zombies");
+        Quest undead = quest(WORLD_CHAPTER, "undead");
+        if (undead != null) {
+            ProgressManager.setTaskProgress(team, undead, undead.task("undead").orElseThrow(), 7, player);
+        }
+        Quest jumps = quest(WORLD_CHAPTER, "jumps");
+        if (jumps != null) {
+            ProgressManager.setTaskProgress(team, jumps, jumps.task("jumps").orElseThrow(), 62, player);
+        }
+        for (String pin : new String[] {TOUR + "/tools", WORLD_CHAPTER + "/undead", WORLD_CHAPTER + "/jumps"}) {
+            ProgressManager.setPinned(player, QuestRef.parse(pin).orElseThrow(), true);
+        }
+        // The Quest Book and a few loot crates on the hotbar.
+        player.getInventory().setItem(0, new ItemStack(QuestItems.QUEST_BOOK.get()));
+        BookManager.book().table("treasure").ifPresent(table -> player.getInventory().setItem(1, LootCrateItem.crate(table, 3)));
     }
 
     private static void complete(UUID team, ServerPlayer player, String chapter, String id) {
@@ -197,13 +230,11 @@ public final class ScreenshotHarness {
             onServer(minecraft, server -> scene(server, self));
             then(() -> minecraft.gui.toastManager().clear(), 2);
             // The inventory with the book's button and its badge.
-            then(() -> minecraft.player.connection.sendCommand("gamemode survival"), 10);
+            onServer(minecraft, server -> gameMode(server, self, GameType.SURVIVAL));
             then(() -> minecraft.gui.setScreen(new InventoryScreen(minecraft.player)), 10);
             shot("inventory_" + tag);
-            then(() -> {
-                minecraft.gui.setScreen(null);
-                minecraft.player.connection.sendCommand("gamemode creative");
-            }, 10);
+            then(() -> minecraft.gui.setScreen(null), 5);
+            onServer(minecraft, server -> gameMode(server, self, GameType.CREATIVE));
             // The tour chapter, fitted to the window.
             then(() -> {
                 QuestBookScreen.open();
@@ -258,7 +289,66 @@ public final class ScreenshotHarness {
                 }
             });
             shot("toast_" + tag);
-            then(() -> minecraft.gui.setScreen(null), 5);
+            // Out in the World: the newer task types, a choice reward waiting and its dialog.
+            then(() -> {
+                minecraft.gui.toastManager().clear();
+                QuestBookScreen screen = book(minecraft);
+                if (screen != null) {
+                    screen.showChapter(WORLD_CHAPTER);
+                    screen.fitMap();
+                }
+            }, 5);
+            shot("book_world_" + tag);
+            then(() -> showQuest(minecraft, new QuestRef(WORLD_CHAPTER, "zombies")), 5);
+            shot("quest_choice_" + tag);
+            then(() -> {
+                QuestBookScreen screen = book(minecraft);
+                if (screen != null) {
+                    moveMouse(minecraft, screen.width - 4, screen.height - 4);
+                    screen.showChoice(new QuestRef(WORLD_CHAPTER, "zombies"), "pick", List.of(new ItemStack(Items.IRON_SWORD),
+                            new ItemStack(Items.BOW), new ItemStack(Items.ARROW, 32)), 1);
+                }
+            }, 5);
+            shot("choice_" + tag);
+            then(() -> showQuest(minecraft, new QuestRef(WORLD_CHAPTER, "spawn")), 5);
+            then(() -> {
+                QuestBookScreen screen = book(minecraft);
+                if (screen != null) {
+                    screen.rewardIconCentre("roll").ifPresent(centre -> moveMouse(minecraft, centre[0], centre[1]));
+                }
+            }, 5);
+            shot("quest_random_" + tag);
+            then(() -> {
+                QuestBookScreen screen = book(minecraft);
+                if (screen != null) {
+                    moveMouse(minecraft, screen.width / 2, screen.height / 2);
+                }
+            }, 2);
+            // Back in the world: the pinned quests in their corner, and the book and crates on the hotbar.
+            then(() -> minecraft.gui.setScreen(null), 10);
+            shot("hud_" + tag);
+        }
+    }
+
+    private static void gameMode(MinecraftServer server, UUID self, GameType mode) {
+        ServerPlayer player = server.getPlayerList().getPlayer(self);
+        if (player != null) {
+            player.setGameMode(mode);
+        }
+    }
+
+    // Puts the mouse at a point given in GUI coordinates, for a hover tooltip (or to keep the mouse off things).
+    private static void moveMouse(Minecraft minecraft, int guiX, int guiY) {
+        double scale = minecraft.getWindow().getGuiScale();
+        try {
+            Field x = MouseHandler.class.getDeclaredField("xpos");
+            Field y = MouseHandler.class.getDeclaredField("ypos");
+            x.setAccessible(true);
+            y.setAccessible(true);
+            x.setDouble(minecraft.mouseHandler, guiX * scale);
+            y.setDouble(minecraft.mouseHandler, guiY * scale);
+        } catch (ReflectiveOperationException e) {
+            HibiscusQuests.LOGGER.warn("Screenshot harness: can't move the mouse", e);
         }
     }
 

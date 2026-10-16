@@ -38,6 +38,7 @@ import software.hibiscus.hibiscusquests.book.ProgressMode;
 import software.hibiscus.hibiscusquests.book.Quest;
 import software.hibiscus.hibiscusquests.book.QuestBook;
 import software.hibiscus.hibiscusquests.book.QuestTask;
+import software.hibiscus.hibiscusquests.config.QuestsConfig;
 import software.hibiscus.hibiscusquests.network.QuestSync;
 import software.hibiscus.hibiscusquests.progress.ProgressManager;
 import software.hibiscus.hibiscusquests.progress.QuestClock;
@@ -46,7 +47,7 @@ import software.hibiscus.hibiscusquests.progress.QuestTeams;
 import software.hibiscus.hibiscusquests.progress.TeamProgress;
 import software.hibiscus.hibiscusquests.task.CriterionTask;
 
-// /hibiscusquests (alias /hquests). Players: open [quest] and claim_all. Ops (hibiscusquests.admin.* nodes): reload,
+// /hibiscusquests (alias /hquests). Players: open [quest], pin <quest> and claim_all. Ops (hibiscusquests.admin.* nodes): reload,
 // change_progress and debug. Player and team arguments take online or offline players by name (through Hibiscus
 // Lib's Profiles), a team's short name, or a team id.
 public final class QuestsCommand {
@@ -89,6 +90,9 @@ public final class QuestsCommand {
                         .executes(context -> open(context, ""))
                         .then(Commands.argument("quest", StringArgumentType.greedyString()).suggests(QUESTS)
                                 .executes(context -> open(context, StringArgumentType.getString(context, "quest").strip()))))
+                .then(Commands.literal("pin")
+                        .then(Commands.argument("quest", StringArgumentType.greedyString()).suggests(QUESTS)
+                                .executes(QuestsCommand::pin)))
                 .then(Commands.literal("claim_all")
                         .executes(QuestsCommand::claimAll))
                 .then(Commands.literal("reload")
@@ -111,6 +115,25 @@ public final class QuestsCommand {
 
     private static int open(CommandContext<CommandSourceStack> context, String quest) throws CommandSyntaxException {
         QuestSync.openBook(context.getSource().getPlayerOrException(), quest);
+        return 1;
+    }
+
+    // Pins the quest to the player's HUD, or unpins it if it's pinned.
+    private static int pin(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        String text = StringArgumentType.getString(context, "quest").strip();
+        Optional<QuestRef> quest = QuestRef.parse(text).filter(ref -> BookManager.book().quest(ref).isPresent());
+        if (quest.isEmpty()) {
+            context.getSource().sendFailure(Component.translatable("hibiscusquests.command.unknown_quests", text));
+            return 0;
+        }
+        boolean pinned = ProgressManager.progressOf(player).pinned(player.getUUID()).contains(quest.get().toString());
+        if (!ProgressManager.setPinned(player, quest.get(), !pinned)) {
+            context.getSource().sendFailure(Component.translatable("hibiscusquests.command.pin.full", QuestsConfig.get(QuestsConfig.MAX_PINNED)));
+            return 0;
+        }
+        context.getSource().sendSuccess(() -> Component.translatable(pinned ? "hibiscusquests.command.pin.removed" : "hibiscusquests.command.pin.added",
+                quest.get().toString()), false);
         return 1;
     }
 

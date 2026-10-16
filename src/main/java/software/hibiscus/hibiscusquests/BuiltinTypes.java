@@ -12,13 +12,25 @@ import net.neoforged.neoforge.registries.NewRegistryEvent;
 import net.neoforged.neoforge.registries.RegisterEvent;
 import software.hibiscus.hibiscusquests.api.reward.RewardTypes;
 import software.hibiscus.hibiscusquests.api.task.TaskTypes;
+import software.hibiscus.hibiscusquests.item.LootDrops;
+import software.hibiscus.hibiscusquests.reward.AdvancementReward;
+import software.hibiscus.hibiscusquests.reward.ChoiceReward;
 import software.hibiscus.hibiscusquests.reward.CommandReward;
 import software.hibiscus.hibiscusquests.reward.ItemReward;
+import software.hibiscus.hibiscusquests.reward.TableRewards;
+import software.hibiscus.hibiscusquests.reward.ToastReward;
 import software.hibiscus.hibiscusquests.reward.XpReward;
 import software.hibiscus.hibiscusquests.task.AdvancementTask;
 import software.hibiscus.hibiscusquests.task.CheckmarkTask;
 import software.hibiscus.hibiscusquests.task.CriterionTask;
+import software.hibiscus.hibiscusquests.task.EnergyTask;
+import software.hibiscus.hibiscusquests.task.FluidTask;
 import software.hibiscus.hibiscusquests.task.ItemTask;
+import software.hibiscus.hibiscusquests.task.KillTask;
+import software.hibiscus.hibiscusquests.task.ObservationTask;
+import software.hibiscus.hibiscusquests.task.PlaceTasks;
+import software.hibiscus.hibiscusquests.task.StatTask;
+import software.hibiscus.hibiscusquests.task.XpTask;
 
 // The task and reward type registries, and the built-in types (hibiscusquests:<name>), with the events the built-in
 // types track progress from.
@@ -30,11 +42,26 @@ final class BuiltinTypes {
         TaskTypes.register(HibiscusQuests.id("checkmark"), CheckmarkTask.TYPE);
         TaskTypes.register(HibiscusQuests.id("advancement"), AdvancementTask.TYPE);
         TaskTypes.register(HibiscusQuests.id("criterion"), CriterionTask.TYPE);
+        TaskTypes.register(HibiscusQuests.id("kill"), KillTask.TYPE);
+        TaskTypes.register(HibiscusQuests.id("location"), PlaceTasks.LocationTask.TYPE);
+        TaskTypes.register(HibiscusQuests.id("dimension"), PlaceTasks.DimensionTask.TYPE);
+        TaskTypes.register(HibiscusQuests.id("biome"), PlaceTasks.BiomeTask.TYPE);
+        TaskTypes.register(HibiscusQuests.id("structure"), PlaceTasks.StructureTask.TYPE);
+        TaskTypes.register(HibiscusQuests.id("stat"), StatTask.TYPE);
+        TaskTypes.register(HibiscusQuests.id("xp"), XpTask.TYPE);
+        TaskTypes.register(HibiscusQuests.id("observation"), ObservationTask.TYPE);
+        TaskTypes.register(HibiscusQuests.id("fluid"), FluidTask.TYPE);
+        TaskTypes.register(HibiscusQuests.id("energy"), EnergyTask.TYPE);
 
         RewardTypes.register(HibiscusQuests.id("item"), ItemReward.TYPE);
         RewardTypes.register(HibiscusQuests.id("xp"), XpReward.POINTS);
         RewardTypes.register(HibiscusQuests.id("xp_levels"), XpReward.LEVELS);
         RewardTypes.register(HibiscusQuests.id("command"), CommandReward.TYPE);
+        RewardTypes.register(HibiscusQuests.id("choice"), ChoiceReward.TYPE);
+        RewardTypes.register(HibiscusQuests.id("random"), TableRewards.RandomReward.TYPE);
+        RewardTypes.register(HibiscusQuests.id("loot"), TableRewards.LootReward.TYPE);
+        RewardTypes.register(HibiscusQuests.id("advancement"), AdvancementReward.TYPE);
+        RewardTypes.register(HibiscusQuests.id("toast"), ToastReward.TYPE);
 
         modEventBus.addListener((NewRegistryEvent event) -> {
             event.register(TaskTypes.REGISTRY);
@@ -47,5 +74,7 @@ final class BuiltinTypes {
 
         NeoForge.EVENT_BUS.addListener(ItemTask.TYPE::onCrafted);
         NeoForge.EVENT_BUS.addListener(AdvancementTask.TYPE::onProgress);
+        NeoForge.EVENT_BUS.addListener(KillTask.TYPE::onDeath);
+        NeoForge.EVENT_BUS.addListener(LootDrops::onDrops);
     }
 }

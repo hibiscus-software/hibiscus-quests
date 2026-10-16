@@ -34,6 +34,7 @@ public final class BookUiState {
     private static boolean loaded;
     private static @Nullable String lastChapter;
     private static @Nullable Boolean panelCollapsed;
+    private static boolean hudVisible = true;
     private static final Set<String> FOLDED_GROUPS = new HashSet<>();
     private static final Map<String, View> VIEWS = new HashMap<>();
 
@@ -55,6 +56,7 @@ public final class BookUiState {
             }
             lastChapter = tag.getString("last_chapter").orElse(null);
             panelCollapsed = tag.getBoolean("panel_collapsed").orElse(null);
+            hudVisible = tag.getBooleanOr("hud_visible", true);
             for (Tag group : tag.getListOrEmpty("folded_groups")) {
                 group.asString().ifPresent(FOLDED_GROUPS::add);
             }
@@ -79,6 +81,7 @@ public final class BookUiState {
         if (panelCollapsed != null) {
             tag.putBoolean("panel_collapsed", panelCollapsed);
         }
+        tag.putBoolean("hud_visible", hudVisible);
         ListTag groups = new ListTag();
         FOLDED_GROUPS.stream().sorted().forEach(group -> groups.add(StringTag.valueOf(group)));
         tag.put("folded_groups", groups);
@@ -116,6 +119,17 @@ public final class BookUiState {
     public static void setPanelCollapsed(boolean collapsed) {
         load();
         panelCollapsed = collapsed;
+    }
+
+    // Whether the pinned quests show on screen (the book's top-bar toggle).
+    public static boolean hudVisible() {
+        load();
+        return hudVisible;
+    }
+
+    public static void setHudVisible(boolean visible) {
+        load();
+        hudVisible = visible;
     }
 
     public static boolean isFolded(String group, boolean byDefault) {

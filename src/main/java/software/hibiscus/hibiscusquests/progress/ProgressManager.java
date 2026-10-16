@@ -46,6 +46,8 @@ import software.hibiscus.hibiscusquests.book.QuestTask;
 import software.hibiscus.hibiscusquests.book.TeamChange;
 import software.hibiscus.hibiscusquests.config.QuestsConfig;
 import software.hibiscus.hibiscusquests.network.QuestSync;
+import software.hibiscus.hibiscusquests.reward.ChoiceReward;
+import software.hibiscus.hibiscusquests.reward.Rewards;
 
 // Every team's progress on the server, and every change to it. Task progress, completion, claims, resets and team
 // changes all go through here, so the rules (QuestLogic), the API events, saving and syncing happen the same way
@@ -304,13 +306,18 @@ public final class ProgressManager {
     // ---- rewards ----
 
     public static ClaimResult claim(ServerPlayer player, QuestRef ref, String rewardId) {
+        return claim(player, ref, rewardId, -1);
+    }
+
+    // A claim, with the option picked for a choice reward (-1 for none).
+    public static ClaimResult claim(ServerPlayer player, QuestRef ref, String rewardId, int choice) {
         Quest quest = BookManager.book().quest(ref).orElse(null);
         QuestReward reward = quest == null ? null : quest.reward(rewardId).orElse(null);
         if (quest == null || reward == null) {
             return ClaimResult.UNKNOWN;
         }
         UUID teamId = QuestTeams.teamIdOf(player);
-        ClaimResult result = claim(player, teamId, quest, reward);
+        ClaimResult result = claim(player, teamId, quest, reward, choice);
         if (result.claimed()) {
             maybeRepeat(teamId, quest, player.getUUID());
         }
@@ -318,6 +325,10 @@ public final class ProgressManager {
     }
 
     private static ClaimResult claim(ServerPlayer player, UUID teamId, Quest quest, QuestReward reward) {
+        return claim(player, teamId, quest, reward, -1);
+    }
+
+    private static ClaimResult claim(ServerPlayer player, UUID teamId, Quest quest, QuestReward reward, int choice) {
         TeamProgress progress = progress(teamId);
         QuestState state = progress.state(quest.ref());
         if (state == null || !state.isCompleted()) {
@@ -327,11 +338,11 @@ public final class ProgressManager {
             return ClaimResult.ALREADY_CLAIMED;
         }
         RewardContext context = new RewardContext(player, teamId, quest.ref(), reward.id(), reward.teamReward(),
-                server == null ? List.of(player) : QuestTeams.onlineMembers(server, teamId));
+                server == null ? List.of(player) : QuestTeams.onlineMembers(server, teamId), choice);
         if (NeoForge.EVENT_BUS.post(new RewardClaimedEvent.Pre(context, reward.reward())).isCanceled()) {
             return ClaimResult.CANCELLED;
         }
-        if (!give(context, reward.reward())) {
+        if (!Rewards.give(context, reward.reward())) {
             return ClaimResult.FAILED;
         }
         state.claim(reward.id(), reward.teamReward(), player.getUUID());
@@ -340,17 +351,8 @@ public final class ProgressManager {
         return ClaimResult.CLAIMED;
     }
 
-    @SuppressWarnings("unchecked")
-    private static <R extends Reward> boolean give(RewardContext context, R reward) {
-        try {
-            return ((RewardType<R>) reward.type()).claim(context, reward);
-        } catch (RuntimeException e) {
-            HibiscusQuests.LOGGER.error("Reward {} of {} failed", context.rewardId(), context.quest(), e);
-            return false;
-        }
-    }
-
-    // Claims every reward the player can claim now, except those left out of Claim all. Returns how many.
+    // Claims every reward the player can claim now, except those left out of Claim all and choices (someone has to
+    // pick). Returns how many.
     public static int claimAll(ServerPlayer player) {
         UUID teamId = QuestTeams.teamIdOf(player);
         TeamProgress progress = progress(teamId);
@@ -362,7 +364,8 @@ public final class ProgressManager {
             }
             boolean any = false;
             for (QuestReward reward : quest.rewards()) {
-                if (!reward.excludeFromClaimAll() && !state.isClaimed(reward.id(), reward.teamReward(), player.getUUID())
+                if (!reward.excludeFromClaimAll() && !(reward.reward() instanceof ChoiceReward)
+                        && !state.isClaimed(reward.id(), reward.teamReward(), player.getUUID())
                         && claim(player, teamId, quest, reward).claimed()) {
                     count++;
                     any = true;
@@ -383,7 +386,7 @@ public final class ProgressManager {
         }
         List<ServerPlayer> online = QuestTeams.onlineMembers(server, teamId);
         for (QuestReward reward : quest.rewards()) {
-            if (reward.autoClaim() == AutoClaim.OFF) {
+            if (reward.autoClaim() == AutoClaim.OFF || reward.reward() instanceof ChoiceReward) {
                 continue;
             }
             if (reward.teamReward()) {
@@ -406,7 +409,8 @@ public final class ProgressManager {
                 continue;
             }
             for (QuestReward reward : quest.rewards()) {
-                if (reward.autoClaim() != AutoClaim.OFF && !state.isClaimed(reward.id(), reward.teamReward(), player.getUUID())) {
+                if (reward.autoClaim() != AutoClaim.OFF && !(reward.reward() instanceof ChoiceReward)
+                        && !state.isClaimed(reward.id(), reward.teamReward(), player.getUUID())) {
                     claim(player, teamId, quest, reward);
                 }
             }
@@ -414,8 +418,10 @@ public final class ProgressManager {
     }
 
     // A repeatable quest starts over once everything has been claimed from it: team rewards by anyone, per-player
-    // rewards by the player who just claimed (or, with no player, a quest with no rewards). Its repeat_cooldown
-    // (seconds) then has to pass before its tasks count again.
+    // rewards by the player who just claimed (or, with no player, a quest with no rewards). With
+    // can_repeat_without_claiming it starts over as soon as it's complete; the completer's rewards (all but choices)
+    // are handed out first, since the next round clears them. Its repeat_cooldown (seconds) then has to pass before its
+    // tasks count again.
     private static void maybeRepeat(UUID teamId, Quest quest, @Nullable UUID player) {
         if (!quest.rules().repeatable() || quest.tasks().isEmpty()) {
             return;
@@ -425,6 +431,18 @@ public final class ProgressManager {
         if (state == null || !state.isCompleted()) {
             return;
         }
+        if (quest.rules().canRepeatWithoutClaiming()) {
+            ServerPlayer claimer = player == null || server == null ? null : server.getPlayerList().getPlayer(player);
+            if (claimer != null) {
+                for (QuestReward reward : quest.rewards()) {
+                    if (!(reward.reward() instanceof ChoiceReward) && !state.isClaimed(reward.id(), reward.teamReward(), player)) {
+                        claim(claimer, teamId, quest, reward);
+                    }
+                }
+            }
+            restart(teamId, progress, quest, state);
+            return;
+        }
         for (QuestReward reward : quest.rewards()) {
             boolean claimed = reward.teamReward() ? state.teamClaims.contains(reward.id())
                     : player != null && state.isClaimed(reward.id(), false, player);
@@ -432,6 +450,10 @@ public final class ProgressManager {
                 return;
             }
         }
+        restart(teamId, progress, quest, state);
+    }
+
+    private static void restart(UUID teamId, TeamProgress progress, Quest quest, QuestState state) {
         state.clear();
         state.repeats++;
         if (quest.rules().repeatCooldown() > 0) {
@@ -441,6 +463,22 @@ public final class ProgressManager {
         progress.completedChapters.remove(quest.chapter());
         changed(teamId, quest.ref());
         refresh(teamId);
+    }
+
+    // ---- pins ----
+
+    // Pins or unpins a quest on the player's HUD (up to the server's maxPinnedQuests). Returns whether it's done.
+    public static boolean setPinned(ServerPlayer player, QuestRef quest, boolean pin) {
+        if (pin && BookManager.book().quest(quest).isEmpty()) {
+            return false;
+        }
+        UUID teamId = QuestTeams.teamIdOf(player);
+        TeamProgress progress = progress(teamId);
+        boolean done = progress.setPinned(player.getUUID(), quest.toString(), pin, QuestsConfig.get(QuestsConfig.MAX_PINNED));
+        if (done) {
+            changed(teamId, quest);
+        }
+        return done;
     }
 
     // ---- lifecycle ----

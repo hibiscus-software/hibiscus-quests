@@ -29,9 +29,11 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
 import software.hibiscus.hibiscuslib.network.HibiscusNetwork;
 import software.hibiscus.hibiscusquests.HibiscusQuests;
 import software.hibiscus.hibiscusquests.api.QuestRef;
@@ -146,6 +148,11 @@ public final class QuestSync {
         PENDING.clear();
         COMPLETED.clear();
         FULL.clear();
+    }
+
+    // A toast reward's toast.
+    public static void sendToast(ServerPlayer player, Component title, Component message, ItemStack icon) {
+        send(player, new QuestPayloads.Toast(title, message, icon));
     }
 
     // Opens the player's book (the open command).

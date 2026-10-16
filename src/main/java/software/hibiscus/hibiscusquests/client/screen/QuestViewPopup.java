@@ -7,8 +7,10 @@
 package software.hibiscus.hibiscusquests.client.screen;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -38,6 +40,7 @@ import software.hibiscus.hibiscuslib.client.gui.TextLayout;
 import software.hibiscus.hibiscuslib.client.gui.popup.Popup;
 import software.hibiscus.hibiscuslib.client.gui.widget.HibiscusButton;
 import software.hibiscus.hibiscuslib.client.gui.widget.HibiscusWidget;
+import software.hibiscus.hibiscuslib.client.gui.widget.IconButton;
 import software.hibiscus.hibiscuslib.client.gui.widget.ItemSlotWidget;
 import software.hibiscus.hibiscuslib.client.gui.widget.Panel;
 import software.hibiscus.hibiscuslib.client.gui.widget.ScrollPanel;
@@ -53,6 +56,8 @@ import software.hibiscus.hibiscusquests.book.BookText;
 import software.hibiscus.hibiscusquests.book.Quest;
 import software.hibiscus.hibiscusquests.book.QuestReward;
 import software.hibiscus.hibiscusquests.book.QuestTask;
+import software.hibiscus.hibiscusquests.book.RewardTable;
+import software.hibiscus.hibiscusquests.book.UsesRewardTable;
 import software.hibiscus.hibiscusquests.client.ClientBook;
 import software.hibiscus.hibiscusquests.client.NodeState;
 import software.hibiscus.hibiscusquests.client.QuestDraw;
@@ -60,6 +65,7 @@ import software.hibiscus.hibiscusquests.network.QuestPayloads;
 import software.hibiscus.hibiscusquests.progress.QuestClock;
 import software.hibiscus.hibiscusquests.progress.QuestLogic;
 import software.hibiscus.hibiscusquests.progress.QuestState;
+import software.hibiscus.hibiscusquests.reward.ChoiceReward;
 import software.hibiscus.hibiscusquests.task.CheckmarkTask;
 
 // The quest view: a panel over the map with the quest's icon, title and state, its description (in pages), its tasks
@@ -78,6 +84,7 @@ final class QuestViewPopup extends Popup {
     private int page;
     private double scroll;
     private ScrollPanel body;
+    private final Map<String, HibiscusWidget> rewardIcons = new HashMap<>();
 
     QuestViewPopup(QuestRef quest, int screenWidth, int screenHeight, Consumer<QuestRef> openQuest) {
         super(width(screenWidth), height(screenHeight));
@@ -136,7 +143,15 @@ final class QuestViewPopup extends Popup {
         Quest quest = found.get();
         add(new TextButton(getX() + getWidth() - 18, getY() + 4, 14, 14, Component.literal("×"), button -> close())
                 .withTooltip(Component.translatable("gui.close")));
-        add(new Header(getX() + 6, getY() + 6, getWidth() - 28, quest));
+        boolean pinned = ClientBook.progress().pinned(ClientBook.me()).contains(quest.ref().toString());
+        IconButton pin = new IconButton(getX() + getWidth() - 36, getY() + 4, 14, Icon.sprite(QuestDraw.PIN),
+                Component.translatable(pinned ? "hibiscusquests.book.unpin" : "hibiscusquests.book.pin"),
+                button -> HibiscusClientNetwork.sendToServer(new QuestPayloads.Pin(quest.ref().toString(), !pinned)));
+        if (!pinned) {
+            pin.flat();
+        }
+        add(pin);
+        add(new Header(getX() + 6, getY() + 6, getWidth() - 46, quest));
         body = new ScrollPanel(getX() + 4, getY() + HEADER, getWidth() - 8, getHeight() - HEADER - 4, Panel.Style.INSET);
         add(body);
         fillBody(quest, body.contentWidth());
@@ -282,6 +297,11 @@ final class QuestViewPopup extends Popup {
         return ((TaskType<T>) type).canSubmit((T) task);
     }
 
+    // For the screenshot harness: where a reward's icon is, to hover over it.
+    Optional<HibiscusWidget> rewardIcon(String rewardId) {
+        return Optional.ofNullable(rewardIcons.get(rewardId));
+    }
+
     private void submit(Quest quest, QuestTask task) {
         HibiscusClientNetwork.sendToServer(new QuestPayloads.Submit(quest.ref().toString(), task.id()));
     }
@@ -289,13 +309,28 @@ final class QuestViewPopup extends Popup {
     private Panel rewardRow(Quest quest, QuestReward reward, int width) {
         Panel row = new Panel(0, 0, width, ROW - 2, Panel.Style.NONE);
         ItemStack stack = reward.reward().icon();
-        row.add(slot(stack.isEmpty() ? BookIcon.of(new ItemStack(Items.CHEST)) : BookIcon.of(stack)), 0, 1);
+        HibiscusWidget icon = slot(stack.isEmpty() ? BookIcon.of(new ItemStack(Items.CHEST)) : BookIcon.of(stack));
+        if (reward.reward() instanceof UsesRewardTable user) {
+            icon = new TablePreviewSlot(stack.isEmpty() ? new ItemStack(Items.CHEST) : stack, user.table());
+        } else if (reward.reward() instanceof ChoiceReward choice) {
+            icon.tooltipLines(() -> choiceTooltip(choice));
+        }
+        row.add(icon, 0, 1);
+        rewardIcons.put(reward.id(), icon);
         boolean canClaim = ClientBook.canClaim(quest, reward);
         boolean claimed = ClientBook.isClaimed(quest, reward);
         int buttonWidth = Math.max(44, textWidth(Component.translatable("hibiscusquests.book.claim")) + 12);
         if (!claimed) {
-            TextButton claim = new TextButton(0, 0, buttonWidth, 16, Component.translatable("hibiscusquests.book.claim"),
-                    button -> HibiscusClientNetwork.sendToServer(new QuestPayloads.Claim(quest.ref().toString(), reward.id())));
+            TextButton claim = new TextButton(0, 0, buttonWidth, 16, Component.translatable(reward.reward() instanceof ChoiceReward
+                    ? "hibiscusquests.book.choose" : "hibiscusquests.book.claim"), button -> {
+                if (reward.reward() instanceof ChoiceReward choice) {
+                    if (screen() != null) {
+                        screen().openPopup(new ChoicePopup(quest.ref(), reward.id(), choice.items()));
+                    }
+                } else {
+                    HibiscusClientNetwork.sendToServer(new QuestPayloads.Claim(quest.ref().toString(), reward.id(), -1));
+                }
+            });
             claim.active = canClaim;
             if (canClaim) {
                 claim.accent();
@@ -336,7 +371,67 @@ final class QuestViewPopup extends Popup {
         return new IconSlot(icon);
     }
 
+    // A choice reward's options, on hover.
+    private static List<Component> choiceTooltip(ChoiceReward choice) {
+        List<Component> lines = new ArrayList<>();
+        lines.add(Component.translatable("hibiscusquests.book.choice_of"));
+        for (ItemStack item : choice.items()) {
+            lines.add(Component.literal("  " + item.getCount() + " \u00d7 ").append(item.getHoverName()).withColor(HibiscusTheme.current().textMuted()));
+        }
+        return lines;
+    }
+
+    // What a reward table may give, with each entry's chance per roll.
+    static List<Component> tablePreview(String tableId) {
+        List<Component> lines = new ArrayList<>();
+        Optional<RewardTable> table = ClientBook.book().table(tableId);
+        if (table.isEmpty()) {
+            lines.add(Component.translatable("hibiscusquests.book.no_table", tableId));
+            return lines;
+        }
+        RewardTable rewardTable = table.get();
+        lines.add(Component.translatable("hibiscusquests.book.table_title", BookText.titleOr(rewardTable.title(), rewardTable.id()),
+                rewardTable.rolls()).withColor(HibiscusTheme.current().text()));
+        for (RewardTable.Entry entry : rewardTable.entries()) {
+            String chance = String.format(Locale.ROOT, "%.1f%%", rewardTable.chance(entry) * 100);
+            lines.add(Component.literal("  " + chance + "  ").withColor(HibiscusTheme.current().color(HibiscusTheme.GOLD))
+                    .append(entry.reward().title().copy().withColor(HibiscusTheme.current().textMuted())));
+        }
+        if (rewardTable.emptyWeight() > 0) {
+            String chance = String.format(Locale.ROOT, "%.1f%%", (double) rewardTable.emptyWeight() / rewardTable.totalWeight() * 100);
+            lines.add(Component.literal("  " + chance + "  ").withColor(HibiscusTheme.current().color(HibiscusTheme.GOLD))
+                    .append(Component.translatable("hibiscusquests.book.table_nothing").withColor(HibiscusTheme.current().textMuted())));
+        }
+        return lines;
+    }
+
     // ---- small widgets ----
+
+    // A reward that rolls a table: its icon, with the table's entries and chances on hover.
+    private static final class TablePreviewSlot extends HibiscusWidget {
+        private final ItemStack stack;
+
+        TablePreviewSlot(ItemStack stack, String table) {
+            super(0, 0, ItemSlotWidget.SIZE, ItemSlotWidget.SIZE, Component.empty());
+            this.stack = stack;
+            tooltipLines(() -> tablePreview(table));
+        }
+
+        @Override
+        protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
+            theme().inset(graphics, getX(), getY(), getWidth(), getHeight());
+            graphics.item(stack, getX() + 1, getY() + 1);
+            graphics.itemDecorations(font(), stack, getX() + 1, getY() + 1);
+            if (isHovered()) {
+                graphics.fill(getX() + 1, getY() + 1, getRight() - 1, getBottom() - 1, theme().color(HibiscusTheme.HOVER));
+            }
+        }
+
+        @Override
+        protected boolean isValidClickButton(MouseButtonInfo buttonInfo) {
+            return false;
+        }
+    }
 
     // The header: icon, title, subtitle and state.
     private static final class Header extends HibiscusWidget {

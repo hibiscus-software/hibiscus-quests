@@ -12,8 +12,8 @@ it, every player has their own.
 
 ![A chapter of the quest book](docs/images/book.png)
 
-> **In development.** The book works end to end (the files, the rules, the screens, saving and syncing); the in-game
-> editor, more task and reward types, reward tables and the pinned-quests HUD are next.
+> **In development.** The book works end to end (the files, the rules, the screens, every task and reward type,
+> reward tables, saving and syncing); the in-game editor is next.
 
 ## The book
 
@@ -34,6 +34,15 @@ recipes in JEI. Rewards are yours alone, or shared once by the team.
 <img src="docs/images/quest-rewards.png" width="380" alt="A completed quest with rewards to claim"></p>
 <p><img src="docs/images/quest-tasks.png" width="380" alt="A quest in progress, with a Submit button">
 <img src="docs/images/search.png" width="380" alt="Searching the book"></p>
+
+Pin up to five quests (the pin in a quest's header, or `/hibiscusquests pin`) to keep their tasks on screen while you
+play; the pin in the book's top bar hides or shows them. A choice reward opens a dialog to pick your item, and a reward
+that rolls a table shows what it can give, and how likely each is, when you hover over it. Loot crates, from rewards or
+dropped by mobs, open with a right click. The Quest Book item (a book and any dye) opens the book too.
+
+<p><img src="docs/images/hud.png" width="380" alt="Pinned quests in the corner of the screen">
+<img src="docs/images/table-preview.png" width="380" alt="A reward table's chances, on hover"></p>
+<p><img src="docs/images/choice.png" width="404" alt="Picking a choice reward"></p>
 
 Search (Ctrl+F) finds quests by title, description or task. Tab and the arrow keys change chapter; Esc closes the quest,
 then the book. A toast tells you when you finish a quest or chapter.
@@ -75,9 +84,13 @@ small chapter:
 overwritten). Chapters that mods ship can be replaced by a file with the same id, changed quest by quest with
 `merge: true`, or hidden with `disabled_sources` in `data.snbt`. Every field is in [docs/API.md](docs/API.md).
 
-- **Tasks:** `item` (hold the items, hand them in, or craft them), `checkmark`, `advancement` and `criterion` (any
-  vanilla or modded advancement trigger, without touching players' advancements).
-- **Rewards:** `item`, `xp`, `xp_levels` and `command`, per player or once per team, optionally claimed automatically.
+- **Tasks:** `item` (hold the items, hand them in, or craft them), `checkmark`, `advancement`, `criterion` (any
+  vanilla or modded advancement trigger, without touching players' advancements), `kill`, `location`, `dimension`,
+  `biome`, `structure`, `stat`, `xp`, `observation`, `fluid` and `energy` (from any mod's tanks and batteries).
+- **Rewards:** `item`, `xp`, `xp_levels`, `command`, `choice`, `random` and `loot` (from reward tables),
+  `advancement` and `toast`, per player or once per team, optionally claimed automatically.
+- **Reward tables** (`reward_tables/<id>.snbt`): weighted rewards, rolled by `random` rewards or packed into loot
+  crates that mobs drop.
 - **Rules:** dependencies (`all`, `any`, `min`, and `one_of` for branching paths), chapters that open in order or after
   other chapters, optional and repeatable quests, and progress that counts before a quest unlocks.
 - **Demo:** a small book showing each task type ships as a data pack; turn it on with `/datapack enable` (find it with
@@ -100,6 +113,7 @@ Ship your quests in your jar under `data/<your mod id>/hibiscusquests/`, with no
 |---|---|---|
 | `open [quest]` | everyone | opens the book, on a quest (`chapter/quest`) if given |
 | `claim_all` | everyone | claims every reward you can, except those left out of Claim all |
+| `pin <quest>` | everyone | pins the quest to your screen, or unpins it |
 | `reload` | ops (`hibiscusquests.admin.reload`) | reads the pack's files again |
 | `change_progress <player\|team> <reset\|complete> <quest\|chapter\|*>` | ops (`hibiscusquests.admin.change_progress`) | a quest is `chapter/quest`; players may be offline; a team is its short name or id |
 | `debug <quest>` | ops (`hibiscusquests.admin.debug`) | why the quest is locked, and each task's progress (for someone else: `/execute as <player> run hquests debug ...`) |
@@ -117,6 +131,8 @@ Each player's own, `config/hibiscusquests-client.toml` (also under Mods > Hibisc
 | `book.zoomSensitivity` | 1.0 | how far one step of the mouse wheel zooms |
 | `book.reducedMotion` | false | no pulsing nodes or moving dashes |
 | `book.chapterListCollapsed` | false | start with the chapter list as icons |
+| `hud.corner` | `TOP_LEFT` | where pinned quests show: `TOP_LEFT`, `TOP_RIGHT`, `BOTTOM_LEFT` or `BOTTOM_RIGHT` |
+| `hud.scale` | 1.0 | how big pinned quests are drawn (0.5 to 2) |
 
 The server's, `config/hibiscusquests-server.toml` (a world's `syncedconfig/` copy wins):
 
@@ -126,6 +142,9 @@ The server's, `config/hibiscusquests-server.toml` (a world's `syncedconfig/` cop
 | `progress.teamChange` | `KEEP_WITH_TEAM` | on changing team: `KEEP_WITH_TEAM`, `COPY_TO_NEW_TEAM` (into a team with no progress) or `MERGE`; `team_change` in `data.snbt` wins |
 | `tasks.itemScanInterval` | 10 | ticks between inventory checks for item tasks |
 | `announcements.chapterCompletion` | false | announce completed chapters in chat |
+| `rewards.lootCrateDrops` | true | mobs drop reward tables' loot crates (`drop_loot_crates` in `data.snbt` can also turn it off) |
+| `book.maxPinnedQuests` | 5 | how many quests a player can pin |
+| `book.giveBookOnFirstJoin` | false | give each player a Quest Book the first time they join |
 
 ## Building
 

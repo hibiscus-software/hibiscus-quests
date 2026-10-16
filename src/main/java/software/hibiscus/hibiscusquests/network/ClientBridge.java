@@ -27,6 +27,10 @@ final class ClientBridge {
         ClientQuestState.onProgress(payload);
     }
 
+    static void toast(QuestPayloads.Toast payload) {
+        ClientQuestState.onToast(payload);
+    }
+
     static void openBook(QuestPayloads.OpenBook payload) {
         QuestBookScreen.open(QuestRef.parse(payload.quest()).orElse(null));
     }

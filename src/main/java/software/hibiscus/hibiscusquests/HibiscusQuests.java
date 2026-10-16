@@ -12,6 +12,8 @@ import com.mojang.logging.LogUtils;
 
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Prediction;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -56,6 +58,7 @@ public class HibiscusQuests {
         QuestPermissions.init();
         BuiltinTypes.register(modEventBus);
         QuestSounds.register(modEventBus);
+        QuestItems.register(modEventBus);
         QuestNetwork.register(modEventBus);
         QuestPacks.register(modEventBus);
         HibiscusQuestsGameTests.register(modEventBus);
@@ -88,6 +91,7 @@ public class HibiscusQuests {
         if (event.getEntity() instanceof ServerPlayer player) {
             QuestSync.onLogin(player);
             ProgressManager.onLogin(player);
+            giveBookOnFirstJoin(player);
         }
     }
 
@@ -95,6 +99,14 @@ public class HibiscusQuests {
         QuestNetwork.forget(event.getEntity().getUUID());
         if (event.getEntity() instanceof ServerPlayer player) {
             ProgressManager.onLogout(player);
+        }
+    }
+
+    // The Quest Book, once per player, when the server hands it out (giveBookOnFirstJoin).
+    private static void giveBookOnFirstJoin(ServerPlayer player) {
+        if (QuestsConfig.get(QuestsConfig.GIVE_BOOK) && !player.getData(QuestItems.BOOK_GIVEN)) {
+            player.setData(QuestItems.BOOK_GIVEN, true);
+            player.getInventory().placeItemBackInInventory(new ItemStack(QuestItems.QUEST_BOOK.get()), Prediction.SERVER_ONLY);
         }
     }
 

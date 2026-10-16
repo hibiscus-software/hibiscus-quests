@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    "minecraft:book",
+    "#c:dyes"
+  ],
+  "result": {
+    "id": "hibiscusquests:quest_book"
+  }
+}

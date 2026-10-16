@@ -25,20 +25,22 @@ import net.minecraft.util.profiling.ProfilerFiller;
 import software.hibiscus.hibiscusquests.HibiscusQuests;
 import software.hibiscus.hibiscusquests.book.BookSources.RawFile;
 
-// Reads the chapters mods and data packs ship, data/<namespace>/hibiscusquests/chapters/*.snbt and
-// data/<namespace>/hibiscusquests/chapter_groups.snbt, whenever data packs load (server start, /reload). A data pack
-// overrides a mod's file by shipping the same path, which is how a pack can replace, or remove (remove: true), one.
+// Reads the chapters mods and data packs ship, data/<namespace>/hibiscusquests/chapters/*.snbt,
+// data/<namespace>/hibiscusquests/chapter_groups.snbt and data/<namespace>/hibiscusquests/reward_tables/*.snbt,
+// whenever data packs load (server start, /reload). A data pack overrides a mod's file by shipping the same path,
+// which is how a pack can replace, or remove (remove: true), one.
 // The files are handed to BookManager, which merges them with the pack's own and rebuilds the book.
 public final class DataChapters extends SimplePreparableReloadListener<DataChapters.Loaded> {
     public static final Identifier ID = HibiscusQuests.id("chapters");
     private static final String ROOT = HibiscusQuests.MODID;
 
-    public record Loaded(List<RawFile> chapters, List<RawFile> groups, List<String> warnings) {}
+    public record Loaded(List<RawFile> chapters, List<RawFile> groups, List<RawFile> tables, List<String> warnings) {}
 
     @Override
     protected Loaded prepare(ResourceManager manager, ProfilerFiller profiler) {
         List<RawFile> chapters = new ArrayList<>();
         List<RawFile> groups = new ArrayList<>();
+        List<RawFile> tables = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
         Map<Identifier, Resource> files = manager.listResources(ROOT, id -> id.getPath().endsWith(".snbt"));
         for (Map.Entry<Identifier, Resource> entry : files.entrySet()) {
@@ -47,8 +49,9 @@ public final class DataChapters extends SimplePreparableReloadListener<DataChapt
             String origin = file.getNamespace() + ":" + file.getPath() + " (" + entry.getValue().sourcePackId() + ")";
             boolean chapter = path.startsWith(PackFiles.CHAPTERS + "/") && path.indexOf('/', PackFiles.CHAPTERS.length() + 1) < 0;
             boolean group = path.equals(PackFiles.GROUPS);
-            if (!chapter && !group) {
-                continue; // reward tables and the like are read by their own loaders
+            boolean table = path.startsWith(PackFiles.TABLES + "/") && path.indexOf('/', PackFiles.TABLES.length() + 1) < 0;
+            if (!chapter && !group && !table) {
+                continue;
             }
             CompoundTag tag;
             try (Reader reader = entry.getValue().openAsReader()) {
@@ -60,11 +63,14 @@ public final class DataChapters extends SimplePreparableReloadListener<DataChapt
             if (chapter) {
                 String name = path.substring(PackFiles.CHAPTERS.length() + 1);
                 chapters.add(new RawFile(PackFiles.chapterId(tag, name), Optional.of(file.getNamespace()), tag, origin));
+            } else if (table) {
+                String name = path.substring(PackFiles.TABLES.length() + 1);
+                tables.add(new RawFile(PackFiles.chapterId(tag, name), Optional.of(file.getNamespace()), tag, origin));
             } else {
                 groups.add(new RawFile(PackFiles.GROUPS, Optional.of(file.getNamespace()), tag, origin));
             }
         }
-        return new Loaded(chapters, groups, warnings);
+        return new Loaded(chapters, groups, tables, warnings);
     }
 
     private static String readAll(Reader reader) throws IOException {
@@ -80,6 +86,6 @@ public final class DataChapters extends SimplePreparableReloadListener<DataChapt
     @Override
     protected void apply(Loaded loaded, ResourceManager manager, ProfilerFiller profiler) {
         loaded.warnings().forEach(warning -> HibiscusQuests.LOGGER.warn("Quest book: {}", warning));
-        BookManager.onDataLoaded(loaded.chapters(), loaded.groups());
+        BookManager.onDataLoaded(loaded.chapters(), loaded.groups(), loaded.tables());
     }
 }

@@ -26,6 +26,7 @@ import net.minecraft.locale.Language;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.common.NeoForge;
 import software.hibiscus.hibiscuslib.api.team.ClientTeams;
@@ -212,6 +213,18 @@ public final class QuestBookScreen extends BaseScreen {
             addRenderableWidget(teamButton);
             right -= 4;
         }
+        boolean hud = BookUiState.hudVisible();
+        right -= 20;
+        IconButton hudToggle = new IconButton(right, top, 20, Icon.sprite(QuestDraw.PIN),
+                Component.translatable(hud ? "hibiscusquests.book.hud_on" : "hibiscusquests.book.hud_off"), button -> {
+                    BookUiState.setHudVisible(!BookUiState.hudVisible());
+                    rebuildWidgets();
+                });
+        if (!hud) {
+            hudToggle.flat();
+        }
+        addRenderableWidget(hudToggle);
+        right -= 4;
         int claimable = ClientBook.unclaimedCount();
         right -= 20;
         IconButton claimAll = new IconButton(right, top, 20, Icon.sprite(QuestDraw.CLAIM_ALL),
@@ -577,5 +590,18 @@ public final class QuestBookScreen extends BaseScreen {
         if (search != null) {
             search.setValue(text);
         }
+    }
+
+    // The centre of a reward's icon in the open quest view, in GUI coordinates.
+    public Optional<int[]> rewardIconCentre(String rewardId) {
+        return topPopup().filter(QuestViewPopup.class::isInstance).map(QuestViewPopup.class::cast)
+                .flatMap(view -> view.rewardIcon(rewardId))
+                .map(icon -> new int[] {icon.getX() + icon.getWidth() / 2, icon.getY() + icon.getHeight() / 2});
+    }
+
+    public void showChoice(QuestRef quest, String rewardId, List<ItemStack> items, int picked) {
+        ChoicePopup popup = new ChoicePopup(quest, rewardId, items);
+        openPopup(popup);
+        popup.pick(picked);
     }
 }

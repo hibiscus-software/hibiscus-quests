@@ -1,0 +1,38 @@
+{
+    id: "test_world",
+    group: "tests",
+    order: 4,
+    title: "Test: task and reward types",
+    always_invisible: true,
+    quests: [
+        {id: "kill", x: 0.0d, y: 0.0d, tasks: [{id: "t", type: "kill", entity: "minecraft:zombie", count: 2L}]},
+        {id: "kill_tag", x: 1.0d, y: 0.0d, tasks: [{id: "t", type: "kill", entity: "#minecraft:undead", count: 1L}]},
+        {id: "location", x: 2.0d, y: 0.0d, tasks: [{id: "t", type: "location", x: 5, y: -59, z: 5, radius: 3.0d}]},
+        {id: "box", x: 3.0d, y: 0.0d, tasks: [{id: "t", type: "location", box: [100, -64, 100, 110, 320, 110]}]},
+        {id: "dimension", x: 4.0d, y: 0.0d, tasks: [{id: "t", type: "dimension", dimension: "minecraft:the_nether"}]},
+        {id: "stat", x: 5.0d, y: 0.0d, tasks: [{id: "t", type: "stat", stat: "minecraft:jump", count: 3L}]},
+        {id: "xp", x: 6.0d, y: 0.0d, tasks: [{id: "t", type: "xp", amount: 5L}]},
+        {id: "xp_detect", x: 7.0d, y: 0.0d, tasks: [{id: "t", type: "xp", amount: 3L, consume: false}]},
+        {id: "fluid", x: 8.0d, y: 0.0d, tasks: [{id: "t", type: "fluid", fluid: "minecraft:water", amount: 2000L}]},
+        {id: "fluid_detect", x: 9.0d, y: 0.0d, tasks: [{id: "t", type: "fluid", fluid: "minecraft:water", amount: 1000L, mode: "detect"}]},
+        {id: "energy", x: 10.0d, y: 0.0d, tasks: [{id: "t", type: "energy", amount: 30000L, max_rate: 20000L}]},
+        {
+            id: "choice",
+            x: 0.0d, y: 2.0d,
+            tasks: [{type: "checkmark"}],
+            rewards: [{id: "pick", type: "choice", items: ["minecraft:iron_sword", "minecraft:bow", {id: "minecraft:arrow", count: 32}]},
+                      {id: "other", type: "xp", amount: 1}]
+        },
+        {id: "random", x: 1.0d, y: 2.0d, tasks: [{type: "checkmark"}], rewards: [{id: "roll", type: "random", table: "test_single"}]},
+        {id: "loot", x: 2.0d, y: 2.0d, tasks: [{type: "checkmark"}], rewards: [{id: "crate", type: "loot", table: "test_single", count: 2}]},
+        {id: "toast", x: 3.0d, y: 2.0d, tasks: [{type: "checkmark"}], rewards: [{id: "toast", type: "toast", title: "Hello"}]},
+        {
+            id: "again",
+            x: 4.0d, y: 2.0d,
+            repeatable: true,
+            can_repeat_without_claiming: true,
+            tasks: [{type: "checkmark"}],
+            rewards: [{id: "points", type: "xp", amount: 2}]
+        }
+    ]
+}

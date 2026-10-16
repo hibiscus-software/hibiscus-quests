@@ -28,6 +28,7 @@ public final class QuestDraw {
     public static final Identifier LINK = HibiscusQuests.id("icon/link");
     public static final Identifier PANEL_COLLAPSE = HibiscusQuests.id("icon/panel_collapse");
     public static final Identifier PANEL_EXPAND = HibiscusQuests.id("icon/panel_expand");
+    public static final Identifier PIN = HibiscusQuests.id("icon/pin");
 
     // A locked quest's face and edge, and the veil over its icon.
     private static final int LOCKED_FACE = 0xFF26282C;

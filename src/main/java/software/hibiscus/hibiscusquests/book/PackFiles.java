@@ -31,11 +31,13 @@ import software.hibiscus.hibiscusquests.book.BookSources.RawFile;
 //     data.snbt                       book settings
 //     chapter_groups.snbt             {groups: [...]}
 //     chapters/<chapter_id>.snbt      one chapter each
+//     reward_tables/<table_id>.snbt   one reward table each
 // Files are SNBT, written by Hibiscus Lib's SnbtFiles (sorted keys, atomic, with a .bak).
 public final class PackFiles {
     public static final String SETTINGS = "data.snbt";
     public static final String GROUPS = "chapter_groups.snbt";
     public static final String CHAPTERS = "chapters";
+    public static final String TABLES = "reward_tables";
     private static final String SUFFIX = ".snbt";
 
     private PackFiles() {}
@@ -52,20 +54,27 @@ public final class PackFiles {
         List<RawFile> groups = new ArrayList<>();
         readFile(directory.resolve(GROUPS), warnings)
                 .ifPresent(tag -> groups.add(new RawFile(GROUPS, Optional.empty(), tag, display(directory, GROUPS))));
-        List<RawFile> chapters = new ArrayList<>();
-        Path chapterDir = directory.resolve(CHAPTERS);
-        if (Files.isDirectory(chapterDir)) {
-            try (Stream<Path> files = Files.list(chapterDir)) {
+        List<RawFile> chapters = readDirectory(directory, CHAPTERS, warnings);
+        List<RawFile> tables = readDirectory(directory, TABLES, warnings);
+        return new BookSources(settings, groups, chapters, List.of(), tables, List.of());
+    }
+
+    // Every .snbt file in a subdirectory, by name; ids come from the files' id fields, else their names.
+    private static List<RawFile> readDirectory(Path directory, String subdirectory, Consumer<String> warnings) {
+        List<RawFile> found = new ArrayList<>();
+        Path dir = directory.resolve(subdirectory);
+        if (Files.isDirectory(dir)) {
+            try (Stream<Path> files = Files.list(dir)) {
                 for (Path file : files.filter(path -> path.getFileName().toString().endsWith(SUFFIX)).sorted().toList()) {
                     String name = file.getFileName().toString();
-                    readFile(file, warnings).ifPresent(tag -> chapters.add(new RawFile(chapterId(tag, name), Optional.empty(), tag,
-                            display(directory, CHAPTERS + "/" + name))));
+                    readFile(file, warnings).ifPresent(tag -> found.add(new RawFile(chapterId(tag, name), Optional.empty(), tag,
+                            display(directory, subdirectory + "/" + name))));
                 }
             } catch (IOException e) {
-                warnings.accept("Couldn't list " + chapterDir + ": " + e.getMessage());
+                warnings.accept("Couldn't list " + dir + ": " + e.getMessage());
             }
         }
-        return new BookSources(settings, groups, chapters, List.of());
+        return found;
     }
 
     // A chapter's id: its id field, else its file name without .snbt.
@@ -99,6 +108,17 @@ public final class PackFiles {
 
     public static void writeChapter(Path directory, Chapter chapter, DynamicOps<Tag> ops) throws IOException {
         SnbtFiles.write(directory.resolve(CHAPTERS).resolve(chapter.id() + SUFFIX), encode(chapter, ops));
+    }
+
+    public static CompoundTag encode(RewardTable table, DynamicOps<Tag> ops) {
+        Tag tag = RewardTable.CODEC.encodeStart(ops, table).getOrThrow(message -> new IllegalStateException("Can't write reward table " + table.id() + ": " + message));
+        CompoundTag compound = (CompoundTag) tag;
+        compound.putString("id", table.id());
+        return compound;
+    }
+
+    public static void writeTable(Path directory, RewardTable table, DynamicOps<Tag> ops) throws IOException {
+        SnbtFiles.write(directory.resolve(TABLES).resolve(table.id() + SUFFIX), encode(table, ops));
     }
 
     public static void writeSettings(Path directory, BookSettings settings, DynamicOps<Tag> ops) throws IOException {

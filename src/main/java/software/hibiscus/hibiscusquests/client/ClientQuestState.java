@@ -26,8 +26,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.RegistryOps;
 import software.hibiscus.hibiscuslib.client.HibiscusClientNetwork;
+import software.hibiscus.hibiscuslib.client.gui.HibiscusToasts;
+import software.hibiscus.hibiscuslib.client.gui.Icon;
 import software.hibiscus.hibiscusquests.HibiscusQuests;
 import software.hibiscus.hibiscusquests.book.QuestBook;
 import software.hibiscus.hibiscusquests.network.QuestPayloads;
@@ -175,6 +178,12 @@ public final class ClientQuestState {
             return; // a delta for a team we've just left; the full sync for the new one follows
         }
         changed();
+    }
+
+    // A toast reward's toast (always shown: it's the reward).
+    public static void onToast(QuestPayloads.Toast payload) {
+        Component message = payload.message().getString().isEmpty() ? null : payload.message();
+        HibiscusToasts.show(payload.title(), message, payload.icon().isEmpty() ? Icon.NONE : Icon.item(payload.icon()));
     }
 
     // Leaving a server: forget its progress (books stay cached by hash).

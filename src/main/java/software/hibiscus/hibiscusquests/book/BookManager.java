@@ -35,6 +35,7 @@ public final class BookManager {
     private static BookSources packSources = BookSources.EMPTY;
     private static List<RawFile> modChapters = List.of();
     private static List<RawFile> modGroups = List.of();
+    private static List<RawFile> modTables = List.of();
     private static List<String> warnings = List.of();
     // The pack files' problems from the last read, kept so every rebuild reports them.
     private static List<String> readWarnings = List.of();
@@ -78,9 +79,10 @@ public final class BookManager {
 
     // The data-pack chapters were (re)loaded. On server start this runs before the server exists, so the book is built
     // in onServerStarting; after /reload, OnDatapackSyncEvent rebuilds it once the new data is in place.
-    static void onDataLoaded(List<RawFile> chapters, List<RawFile> groups) {
+    static void onDataLoaded(List<RawFile> chapters, List<RawFile> groups, List<RawFile> tables) {
         modChapters = List.copyOf(chapters);
         modGroups = List.copyOf(groups);
+        modTables = List.copyOf(tables);
     }
 
     // After /reload (player is null then), with the new data packs live.
@@ -107,7 +109,7 @@ public final class BookManager {
     // Merges, decodes and installs the book, then brings everything that depends on it up to date.
     public static void rebuild(MinecraftServer running) {
         List<String> found = new ArrayList<>(readWarnings);
-        BookSources sources = packSources.withModChapters(modChapters, modGroups);
+        BookSources sources = packSources.withModFiles(modChapters, modGroups, modTables);
         DynamicOps<Tag> ops = ops(running);
         QuestBook built = BookMerger.decode(BookMerger.merge(sources, found::add), ops, found::add);
         CriterionTasks.rebuild(built, ops, found::add);

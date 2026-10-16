@@ -1,0 +1,89 @@
+{
+    id: "demo_world",
+    group: "demo",
+    order: 2,
+    title: "Out in the World",
+    subtitle: "Fight, travel, explore, and hand things in",
+    icon: "minecraft:filled_map",
+    quests: [
+        {
+            id: "zombies",
+            title: "Night Watch",
+            x: 0.0d, y: 0.0d,
+            tasks: [{id: "zombies", type: "kill", entity: "minecraft:zombie", count: 5L}],
+            rewards: [{id: "pick", type: "choice", items: ["minecraft:iron_sword", "minecraft:bow", {id: "minecraft:arrow", count: 32}]}]
+        },
+        {
+            id: "undead",
+            title: "Rest in Peace",
+            x: 0.0d, y: 1.5d,
+            dependencies: ["zombies"],
+            tasks: [{id: "undead", type: "kill", title: "Kill undead mobs", entity: "#minecraft:undead", count: 20L}],
+            rewards: [{id: "crates", type: "loot", table: "treasure", count: 2}]
+        },
+        {
+            id: "spawn",
+            title: "Home Again",
+            subtitle: "Back to the world's centre",
+            x: 2.0d, y: 0.0d,
+            tasks: [{id: "spawn", type: "location", dimension: "minecraft:overworld", x: 0, y: 64, z: 0, radius: 32.0d}],
+            rewards: [{id: "roll", type: "random", table: "treasure"}]
+        },
+        {
+            id: "nether",
+            title: "Into the Fire",
+            x: 4.0d, y: 0.0d,
+            dependencies: ["spawn"],
+            tasks: [{id: "nether", type: "dimension", dimension: "minecraft:the_nether"}],
+            rewards: [{id: "toast", type: "toast", title: "Hot in here", message: "Bring fire resistance next time.", icon: "minecraft:blaze_powder"}]
+        },
+        {
+            id: "ocean",
+            title: "Salt Water",
+            x: 2.0d, y: 1.5d,
+            tasks: [{id: "ocean", type: "biome", biome: "#minecraft:is_ocean"}]
+        },
+        {
+            id: "village",
+            title: "Neighbours",
+            x: 4.0d, y: 1.5d,
+            tasks: [{id: "village", type: "structure", structure: "#minecraft:village"}],
+            rewards: [{id: "emeralds", type: "item", item: "minecraft:emerald", count: 5}]
+        },
+        {
+            id: "jumps",
+            title: "Spring in Your Step",
+            x: 6.0d, y: 0.0d,
+            tasks: [{id: "jumps", type: "stat", stat_type: "minecraft:custom", stat: "minecraft:jump", count: 100L}]
+        },
+        {
+            id: "levels",
+            title: "Tithe",
+            subtitle: "Hand in some experience",
+            x: 6.0d, y: 1.5d,
+            tasks: [{id: "levels", type: "xp", amount: 10L}],
+            rewards: [{id: "book", type: "item", item: "minecraft:enchanted_book"}]
+        },
+        {
+            id: "stars",
+            title: "Stargazer",
+            x: 8.0d, y: 0.0d,
+            tasks: [{id: "look", type: "observation", block: "minecraft:beacon", ticks: 60L}]
+        },
+        {
+            id: "lava",
+            title: "Liquid Heat",
+            x: 8.0d, y: 1.5d,
+            tasks: [{id: "lava", type: "fluid", fluid: "minecraft:lava", amount: 3000L}],
+            rewards: [{id: "advancement", type: "advancement", advancement: "minecraft:story/lava_bucket"}]
+        },
+        {
+            id: "power",
+            title: "Charged Up",
+            subtitle: "Needs a mod with batteries",
+            optional: true,
+            x: 10.0d, y: 0.75d,
+            tasks: [{id: "power", type: "energy", amount: 100000L, max_rate: 20000L}]
+        }
+    ]
+}

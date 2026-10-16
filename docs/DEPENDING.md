@@ -48,7 +48,7 @@ dependencies {
     compileOnly "software.hibiscus.hibiscusquests:hibiscusquests-api:0.1.0+26.3"
     // Optional: Hibiscus Quests (and Hibiscus Lib) in your dev runs, to try your quests.
     localRuntime "software.hibiscus.hibiscusquests:hibiscusquests:1.0.0+26.3"
-    localRuntime "software.hibiscus.hibiscuslib:hibiscuslib:1.2.1+26.3"
+    localRuntime "software.hibiscus.hibiscuslib:hibiscuslib:1.3.0+26.3"
 }
 ```
 

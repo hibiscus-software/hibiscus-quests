@@ -78,5 +78,21 @@ Suggested version: 1.0.0 (the first release). Needs Hibiscus Lib 1.3.0 (its new 
 - **Client settings**, `hibiscusquests-client.toml`: toasts, sounds, the zoom step, reduced motion (no pulsing or
   moving dashes) and whether the chapter list starts collapsed.
 - **API 0.2.0**: `QuestBookOpenEvent` (client, cancellable).
+- **More tasks:** `kill` (entity or tag), `location` (a point and radius, or a box), `dimension`, `biome`,
+  `structure`, `stat` (any vanilla statistic), `xp` (hand in levels or points, or just reach them), `observation`
+  (look at a block or entity), `fluid` and `energy` (hand in from any mod's tanks and batteries through NeoForge's
+  item capabilities; `max_rate` caps one hand-in).
+- **More rewards:** `choice` (pick one item in a dialog), `random` (roll a reward table), `loot` (a table's loot
+  crates), `advancement` and `toast`. Repeatable quests with `can_repeat_without_claiming` start over as soon as they
+  complete, handing their rewards straight to the player who completed them.
+- **Reward tables**, `reward_tables/<id>.snbt` in the pack's files or a mod's data, merged like chapters: weighted
+  entries, several rolls, a chance of nothing, and the book shows each entry's chance. A table can have a **loot
+  crate**, named and coloured, opened with a right click and dropped by mobs players kill (a chance each for passive
+  mobs, hostile ones and bosses; `rewards.lootCrateDrops` and `drop_loot_crates` turn it off).
+- **Pinned quests:** pin up to `book.maxPinnedQuests` (5) quests from the quest view or `/hibiscusquests pin`, and
+  their tasks show in a corner of the screen (`hud.corner`, `hud.scale` in the client config; the book's top bar
+  hides them). Pins are per player and saved.
+- **The Quest Book item**, crafted from a book and any dye, opens the book; `book.giveBookOnFirstJoin` hands one out.
+- **API 0.3.0**: `RewardContext.choice()`, the index picked in a choice dialog.
 
 [Unreleased]: https://github.com/hibiscus-software/hibiscus-quests/commits/HEAD

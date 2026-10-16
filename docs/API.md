@@ -15,6 +15,7 @@ Put your chapters in your mod's resources:
 src/main/resources/data/<your mod id>/hibiscusquests/
   chapter_groups.snbt          optional: groups for the chapter list
   chapters/<chapter id>.snbt   one chapter per file
+  reward_tables/<id>.snbt      optional: reward tables for random rewards and loot crates
 ```
 
 and declare Hibiscus Quests as an optional dependency in `neoforge.mods.toml` (so it loads first when it's there):
@@ -142,8 +143,20 @@ optionally `title`, `icon`, `optional_task: true` (the quest completes without i
 | `checkmark` | | the player ticks it in the book |
 | `advancement` | `advancement`, optional `criterion` | the player has the advancement (or that criterion of it) |
 | `criterion` | `criterion: {trigger, conditions}`, `count` (default 1) | the trigger fires with matching conditions, `count` times |
+| `kill` | `entity` (id or `#tag`), `count` (default 1) | the player kills that many (directly or with a projectile they shot) |
+| `location` | `x`, `y`, `z` and `radius`, or `box: [x1, y1, z1, x2, y2, z2]`; optional `dimension` | the player is within `radius` blocks of the point, or inside the box |
+| `dimension` | `dimension` | the player is in the dimension |
+| `biome` | `biome` (id or `#tag`) | the player is in the biome |
+| `structure` | `structure` (id or `#tag`) | the player is inside one of the structure's pieces |
+| `stat` | `stat_type` (default `minecraft:custom`), `stat`, `count` | the player's statistic reaches `count` (`minecraft:mined` + `minecraft:stone`, `minecraft:custom` + `minecraft:jump`...) |
+| `xp` | `amount`, `points` (default false: levels), `consume` (default true) | the player hands in that many levels (or points) with Submit; with `consume: false`, reaching them is enough |
+| `observation` | `block` or `entity` (id or `#tag`), `ticks` (default 20) | the player has looked at one, from up to 8 blocks away, for `ticks` ticks in all |
+| `fluid` | `fluid` (id or `#tag`), `amount` (mB), `mode` (`consume` default, or `detect`) | the player hands in that much from buckets, tanks and other fluid-holding items, or carries it |
+| `energy` | `amount` (FE), `max_rate` (default 0, no cap) | the player hands in that much from energy-holding items; `max_rate` caps one press of Submit |
 
-More types (kill, location, dimension, biome, structure, stat, XP, observation, fluid, energy) arrive before 1.0.0.
+The place tasks (`location`, `dimension`, `biome`, `structure`) are checked once a second, and as soon as the task
+starts, so being there already counts. `fluid` and `energy` use NeoForge's item capabilities, so any mod's tanks and
+batteries work.
 
 #### Reward fields
 
@@ -157,6 +170,40 @@ the whole team; otherwise each member claims their own), `auto_claim` (`off`, `e
 | `xp` | `amount` | experience points |
 | `xp_levels` | `levels` | |
 | `command` | `command`, `title`, `silent` | runs as the server; `{p}` the claimer's name, `{uuid}` their UUID, `{team}` their team's short name, `{quest}` the quest |
+| `choice` | `items` (2 to 12, ids or stacks) | the player picks one in a dialog; left out of Claim all and auto-claim |
+| `random` | `table` | rolls the reward table now and hands out what comes up |
+| `loot` | `table`, `count` (default 1) | that many of the table's loot crates, opened later with a right click |
+| `advancement` | `advancement` | grants every criterion of it the player still lacks |
+| `toast` | `title`, `message`, `icon` | just a toast (for a team reward, to every member online) |
+
+A quest with `repeatable: true` and `can_repeat_without_claiming: true` starts over the moment it completes: its
+rewards (other than `choice`) go to the player who completed it, without waiting for a claim.
+
+#### Reward tables
+
+`reward_tables/<id>.snbt`, one table per file, merged like chapters (a pack file with the same id replaces a mod's,
+`remove: true` drops it, `disabled_sources` hides a namespace's):
+
+```snbt
+{
+    title: "Treasure",
+    icon: "minecraft:chest",
+    rolls: 2,
+    empty_weight: 10,
+    entries: [
+        {weight: 10, type: "item", item: "minecraft:diamond"},
+        {weight: 30, type: "xp", amount: 50}
+    ],
+    loot_crate: {name: "Treasure Crate", color: "#e8b04b", drop: {passive: 0.0d, hostile: 0.01d, boss: 0.5d}}
+}
+```
+
+Each of the `rolls` picks one entry by weight, or nothing with `empty_weight`. Entries are rewards of any type but
+`random`, `loot` and `choice`, with a `weight` (default 1). The book shows a table's entries and their chances when you
+hover over a reward that uses it. With a `loot_crate`, the table has its own crate item, named and coloured as given;
+mobs a player kills drop one with the chance for their kind (bosses are `#c:bosses`), unless `drop_loot_crates: false`
+in `data.snbt` or the server's `rewards.lootCrateDrops` is off. A crate's rewards reach the API as a claim of the quest
+`loot_crate/<table>`.
 
 #### Text
 
@@ -268,7 +315,9 @@ book too. A type tracks progress through any mix of:
 
 `Task.countsWhileLocked()` says whether progress counts before the quest unlocks, and `icon()` and `title()` what the
 book shows when the chapter doesn't override them. Reward types work the same way: implement `Reward` and
-`RewardType` (`codec()` and `claim(context, reward)`) and register with `RewardTypes.register`.
+`RewardType` (`codec()` and `claim(context, reward)`) and register with `RewardTypes.register`. The `RewardContext`
+carries the player, their team, the quest and reward, whether it's a team reward, the members online, and `choice()`
+(the index picked in a choice dialog, or -1).
 
 ### Events
 

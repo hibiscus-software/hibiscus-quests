@@ -24,13 +24,13 @@ public final class HibiscusQuestsApi {
     public static final String MOD_ID = "hibiscusquests";
 
     /** The full API version, {@code MAJOR.MINOR.PATCH}. This is also the version of the published API jar. */
-    public static final String API_VERSION = "0.2.0";
+    public static final String API_VERSION = "0.3.0";
 
     /** The major part of {@link #API_VERSION}. */
     public static final int API_VERSION_MAJOR = 0;
 
     /** The minor part of {@link #API_VERSION}. */
-    public static final int API_VERSION_MINOR = 2;
+    public static final int API_VERSION_MINOR = 3;
 
     /** The patch part of {@link #API_VERSION}. */
     public static final int API_VERSION_PATCH = 0;

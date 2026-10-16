@@ -13,9 +13,13 @@ import io.netty.buffer.ByteBuf;
 
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.world.item.ItemStack;
 import software.hibiscus.hibiscusquests.HibiscusQuests;
 
 // Every payload Hibiscus Quests sends. Server to client: the book's hash, the book in chunks, and progress (all of it,
@@ -86,6 +90,21 @@ public final class QuestPayloads {
         }
     }
 
+    // A toast reward's toast.
+    public record Toast(Component title, Component message, ItemStack icon) implements CustomPacketPayload {
+        public static final Type<Toast> TYPE = payloadType("toast");
+        public static final StreamCodec<RegistryFriendlyByteBuf, Toast> STREAM_CODEC = StreamCodec.composite(
+                ComponentSerialization.STREAM_CODEC, Toast::title,
+                ComponentSerialization.STREAM_CODEC, Toast::message,
+                ItemStack.OPTIONAL_STREAM_CODEC, Toast::icon,
+                Toast::new);
+
+        @Override
+        public Type<Toast> type() {
+            return TYPE;
+        }
+    }
+
     // ---- Client to server ----
 
     // "Send me the book with this hash" (the server only answers for its current book).
@@ -99,12 +118,13 @@ public final class QuestPayloads {
         }
     }
 
-    // Claim one reward of a quest ("chapter/quest").
-    public record Claim(String quest, String reward) implements CustomPacketPayload {
+    // Claim one reward of a quest ("chapter/quest"), with the option picked for a choice reward (-1 for none).
+    public record Claim(String quest, String reward, int choice) implements CustomPacketPayload {
         public static final Type<Claim> TYPE = payloadType("claim");
         public static final StreamCodec<ByteBuf, Claim> STREAM_CODEC = StreamCodec.composite(
                 ByteBufCodecs.stringUtf8(256), Claim::quest,
                 ByteBufCodecs.stringUtf8(128), Claim::reward,
+                ByteBufCodecs.VAR_INT, Claim::choice,
                 Claim::new);
 
         @Override
@@ -121,6 +141,20 @@ public final class QuestPayloads {
 
         @Override
         public Type<ClaimAll> type() {
+            return TYPE;
+        }
+    }
+
+    // Pin a quest to the player's HUD, or unpin it.
+    public record Pin(String quest, boolean pinned) implements CustomPacketPayload {
+        public static final Type<Pin> TYPE = payloadType("pin");
+        public static final StreamCodec<ByteBuf, Pin> STREAM_CODEC = StreamCodec.composite(
+                ByteBufCodecs.stringUtf8(256), Pin::quest,
+                ByteBufCodecs.BOOL, Pin::pinned,
+                Pin::new);
+
+        @Override
+        public Type<Pin> type() {
             return TYPE;
         }
     }

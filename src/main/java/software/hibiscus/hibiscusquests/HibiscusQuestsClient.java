@@ -13,6 +13,7 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
@@ -22,8 +23,11 @@ import software.hibiscus.hibiscuslib.button.HibiscusButtons;
 import software.hibiscus.hibiscuslib.client.gui.HibiscusTheme;
 import software.hibiscus.hibiscusquests.client.ClientBook;
 import software.hibiscus.hibiscusquests.client.ClientQuestState;
+import software.hibiscus.hibiscusquests.client.PinnedHud;
 import software.hibiscus.hibiscusquests.client.QuestsClientConfig;
 import software.hibiscus.hibiscusquests.client.screen.QuestBookScreen;
+import software.hibiscus.hibiscusquests.item.QuestBookItem;
+import software.hibiscus.hibiscusquests.reward.TableRewards;
 
 // Hibiscus Quests' client entrypoint, the only way into client/ code (besides payload handlers, through ClientBridge).
 // Registers the client config, the inventory button that opens the book (with its badge and an unbound "Open Quest Book"
@@ -49,5 +53,8 @@ public class HibiscusQuestsClient {
                 .build());
 
         NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut event) -> ClientQuestState.clear());
+        QuestBookItem.opener = QuestBookScreen::open;
+        modEventBus.addListener((RegisterGuiLayersEvent event) -> event.registerAboveAll(HibiscusQuests.id("pinned_quests"), PinnedHud::render));
+        TableRewards.ClientBookAccess.set(ClientQuestState::book);
     }
 }

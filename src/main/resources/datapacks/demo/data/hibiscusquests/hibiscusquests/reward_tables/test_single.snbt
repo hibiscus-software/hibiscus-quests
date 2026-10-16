@@ -1,0 +1,11 @@
+{
+    id: "test_single",
+    title: "Test table (one entry)",
+    entries: [
+        {weight: 1, type: "item", item: "minecraft:emerald", count: 3}
+    ],
+    loot_crate: {
+        name: "Test Crate",
+        color: "#4fc78a"
+    }
+}

@@ -73,6 +73,22 @@ public final class TeamProgress {
         return List.copyOf(pinned.getOrDefault(player, List.of()));
     }
 
+    // Pins or unpins a quest for a player; false if pinning would go past max.
+    boolean setPinned(UUID player, String quest, boolean pin, int max) {
+        List<String> list = pinned.computeIfAbsent(player, key -> new ArrayList<>());
+        if (!pin) {
+            return list.remove(quest);
+        }
+        if (list.contains(quest)) {
+            return true;
+        }
+        if (list.size() >= max) {
+            return false;
+        }
+        list.add(quest);
+        return true;
+    }
+
     public boolean isEmpty() {
         return quests.values().stream().allMatch(QuestState::isEmpty) && completedChapters.isEmpty();
     }
@@ -153,6 +169,9 @@ public final class TeamProgress {
         delta.put("quests", changed);
         delta.put("removed", removed);
         delta.put("chapters_completed", QuestState.strings(completedChapters));
+        CompoundTag pins = new CompoundTag();
+        pinned.forEach((player, list) -> pins.put(player.toString(), QuestState.strings(list)));
+        delta.put("pinned", pins);
         return delta;
     }
 
@@ -167,5 +186,17 @@ public final class TeamProgress {
         }
         completedChapters.clear();
         QuestState.readStrings(delta.getListOrEmpty("chapters_completed"), completedChapters);
+        delta.getCompound("pinned").ifPresent(pins -> {
+            pinned.clear();
+            for (String key : pins.keySet()) {
+                QuestState.uuid(key).ifPresent(player -> {
+                    List<String> list = new ArrayList<>();
+                    for (Tag entry : pins.getListOrEmpty(key)) {
+                        entry.asString().ifPresent(list::add);
+                    }
+                    pinned.put(player, list);
+                });
+            }
+        });
     }
 }

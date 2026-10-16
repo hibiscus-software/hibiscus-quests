@@ -29,14 +29,15 @@ import software.hibiscus.hibiscusquests.api.book.BookView;
 // chapter gates). Immutable; a reload or edit builds a new one. The same class is used on the client, decoded from
 // the network form.
 public final class QuestBook implements BookView {
-    public static final QuestBook EMPTY = build(BookSettings.DEFAULT, List.of(), List.of(), warning -> {});
+    public static final QuestBook EMPTY = build(BookSettings.DEFAULT, List.of(), List.of(), List.of(), warning -> {});
 
     // What the server sends: everything, including each chapter's source.
     public static final Codec<QuestBook> NETWORK_CODEC = RecordCodecBuilder.create(i -> i.group(
             BookSettings.CODEC.fieldOf("settings").forGetter(QuestBook::settings),
             BookCodecs.list("groups", ChapterGroup.CODEC).forGetter(QuestBook::groups),
-            BookCodecs.list("chapters", Chapter.NETWORK_CODEC).forGetter(QuestBook::chapters))
-            .apply(i, (settings, groups, chapters) -> build(settings, groups, chapters, warning -> {})));
+            BookCodecs.list("chapters", Chapter.NETWORK_CODEC).forGetter(QuestBook::chapters),
+            BookCodecs.list("reward_tables", RewardTable.NETWORK_CODEC).forGetter(book -> List.copyOf(book.tables.values())))
+            .apply(i, (settings, groups, chapters, tables) -> build(settings, groups, chapters, tables, warning -> {})));
 
     // A chapter gate entry: a whole chapter, or one quest.
     public record Requirement(Optional<String> chapter, Optional<QuestRef> quest) {}
@@ -49,9 +50,11 @@ public final class QuestBook implements BookView {
     private final Map<QuestRef, List<QuestRef>> dependents;
     private final Map<QuestRef, Set<QuestRef>> oneOfSiblings;
     private final Map<String, List<Requirement>> chapterRequirements;
+    private final Map<String, RewardTable> tables;
 
     private QuestBook(BookSettings settings, List<ChapterGroup> groups, List<Chapter> chapters, Map<QuestRef, Quest> quests,
-            Map<String, List<Requirement>> chapterRequirements) {
+            Map<String, List<Requirement>> chapterRequirements, Map<String, RewardTable> tables) {
+        this.tables = Collections.unmodifiableMap(tables);
         this.settings = settings;
         this.groups = List.copyOf(groups);
         this.chapters = List.copyOf(chapters);
@@ -89,7 +92,8 @@ public final class QuestBook implements BookView {
 
     // Builds the book from decoded parts: sorts groups and chapters, drops duplicate quests and dependencies or
     // gates that point nowhere (each reported to warnings), and indexes everything.
-    public static QuestBook build(BookSettings settings, List<ChapterGroup> groups, List<Chapter> chapters, Consumer<String> warnings) {
+    public static QuestBook build(BookSettings settings, List<ChapterGroup> groups, List<Chapter> chapters, List<RewardTable> rewardTables,
+            Consumer<String> warnings) {
         List<ChapterGroup> sortedGroups = new ArrayList<>(groups);
         sortedGroups.sort(Comparator.comparingInt(ChapterGroup::order).thenComparing(ChapterGroup::id));
         Map<String, Integer> groupRank = new HashMap<>();
@@ -157,7 +161,29 @@ public final class QuestBook implements BookView {
                 requirements.put(chapter.id(), List.copyOf(gate));
             }
         }
-        return new QuestBook(settings, sortedGroups, cleanedChapters, quests, requirements);
+        Map<String, RewardTable> tables = new LinkedHashMap<>();
+        for (RewardTable table : rewardTables) {
+            if (tables.putIfAbsent(table.id(), table) != null) {
+                warnings.accept("Two reward tables have the id " + table.id() + "; the second is ignored");
+            }
+        }
+        // Rewards that roll a table that isn't there would give nothing: say so.
+        for (Quest quest : quests.values()) {
+            for (QuestReward reward : quest.rewards()) {
+                if (reward.reward() instanceof UsesRewardTable user && !tables.containsKey(user.table())) {
+                    warnings.accept("Quest " + quest.ref() + ", reward " + reward.id() + ": there's no reward table \"" + user.table() + "\"");
+                }
+            }
+        }
+        return new QuestBook(settings, sortedGroups, cleanedChapters, quests, requirements, tables);
+    }
+
+    public Optional<RewardTable> table(String id) {
+        return Optional.ofNullable(tables.get(id));
+    }
+
+    public Iterable<RewardTable> tables() {
+        return tables.values();
     }
 
     public BookSettings settings() {

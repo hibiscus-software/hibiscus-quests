@@ -13,6 +13,7 @@ import os
 from PIL import Image
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "src", "main", "resources", "assets", "hibiscusquests", "textures", "gui", "sprites")
+ITEMS = os.path.join(os.path.dirname(__file__), "..", "src", "main", "resources", "assets", "hibiscusquests", "textures", "item")
 
 SHADOW = "#18191C"
 TEXT = "#E6E6E6"
@@ -226,6 +227,65 @@ def icon_panel(collapse):
     return img
 
 
+def icon_pin():
+    """A map pin, for pinned quests."""
+    img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    px = img.load()
+    head = {(x, y) for y in range(16) for x in range(16) if math.hypot(x + 0.5 - 8, y + 0.5 - 6) <= 4.2}
+    paint(px, head, ACCENT, ACCENT_HOVER, ACCENT_DARK)
+    for (x, y) in ((7, 5), (8, 5), (7, 6)):
+        px[x, y] = rgba(TEXT)
+    for y in range(10, 15):
+        px[8, y] = rgba(TEXT_MUTED)
+    px[8, 15] = rgba(TEXT_DISABLED)
+    return img
+
+
+def item_quest_book():
+    """The Quest Book item: the button's book, at item scale."""
+    return icon_book()
+
+
+def item_crate_band():
+    """The loot crate's tinted layer: a light grey box and lid (the table's colour tints it)."""
+    img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    px = img.load()
+    box = {(x, y) for x in range(2, 14) for y in range(6, 15)}
+    lid = {(x, y) for x in range(1, 15) for y in range(3, 7)}
+    paint(px, box, "#C8C8C8", "#F0F0F0", "#8C8C8C")
+    paint(px, lid, "#D8D8D8", "#FFFFFF", "#969696")
+    return img
+
+
+def item_crate_frame():
+    """The loot crate's untinted layer: dark edges, metal straps and a gold lock."""
+    img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    px = img.load()
+    for x in range(1, 15):
+        px[x, 2] = rgba(SHADOW)
+        px[x, 6] = rgba(SHADOW)
+    for x in range(2, 14):
+        px[x, 15] = rgba(SHADOW)
+    for y in range(3, 15):
+        px[1 if y < 7 else 2, y] = rgba(SHADOW)
+        px[14 if y < 7 else 13, y] = rgba(SHADOW)
+    for y in range(3, 15):
+        px[4, y] = rgba(TEXT_MUTED)
+        px[11, y] = rgba(TEXT_MUTED)
+    for (x, y) in ((7, 5), (8, 5), (7, 6), (8, 6), (7, 7), (8, 7)):
+        px[x, y] = rgba(GOLD)
+    px[7, 8] = rgba(GOLD_DARK)
+    px[8, 8] = rgba(GOLD_DARK)
+    return img
+
+
+def save_item(name, img):
+    path = os.path.join(ITEMS, name + ".png")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    img.save(path)
+    print("wrote", os.path.relpath(path))
+
+
 def save(name, img):
     path = os.path.join(OUT, name + ".png")
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -245,6 +305,10 @@ def main():
     save("icon/link", icon_link())
     save("icon/panel_collapse", icon_panel(True))
     save("icon/panel_expand", icon_panel(False))
+    save("icon/pin", icon_pin())
+    save_item("quest_book", item_quest_book())
+    save_item("loot_crate", item_crate_band())
+    save_item("loot_crate_frame", item_crate_frame())
 
 
 if __name__ == "__main__":

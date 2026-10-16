@@ -22,6 +22,9 @@ public final class QuestsConfig {
     public static final ModConfigSpec.EnumValue<TeamChange> TEAM_CHANGE;
     public static final ModConfigSpec.IntValue ITEM_SCAN_INTERVAL;
     public static final ModConfigSpec.BooleanValue ANNOUNCE_CHAPTERS;
+    public static final ModConfigSpec.BooleanValue LOOT_CRATE_DROPS;
+    public static final ModConfigSpec.IntValue MAX_PINNED;
+    public static final ModConfigSpec.BooleanValue GIVE_BOOK;
 
     static {
         BUILDER.push("progress");
@@ -41,6 +44,22 @@ public final class QuestsConfig {
                 .comment("Ticks between checks of a player's inventory for item tasks that detect items (20 = once a second). A",
                         "check only looks at the inventory when it has changed since the last one.")
                 .defineInRange("itemScanInterval", 10, 1, 1200);
+        BUILDER.pop();
+
+        BUILDER.push("rewards");
+        LOOT_CRATE_DROPS = BUILDER
+                .comment("Let mobs killed by players drop loot crates, with the chances each reward table's loot_crate sets.",
+                        "A book can also turn them off for itself (drop_loot_crates: false in data.snbt).")
+                .define("lootCrateDrops", true);
+        BUILDER.pop();
+
+        BUILDER.push("book");
+        MAX_PINNED = BUILDER
+                .comment("How many quests a player may pin to their screen.")
+                .defineInRange("maxPinnedQuests", 5, 0, 20);
+        GIVE_BOOK = BUILDER
+                .comment("Give each player a Quest Book item the first time they join (the inventory button opens the book anyway).")
+                .define("giveBookOnFirstJoin", false);
         BUILDER.pop();
 
         BUILDER.push("announcements");

@@ -32,7 +32,7 @@ import software.hibiscus.hibiscusquests.book.BookSources.RawFile;
 // with the same id then replaces it, or, with merge: true, is laid over it: its fields replace the mod's, and its
 // quests and quest links replace the mod's ones with the same id (remove: true on a quest drops it) or are added. A
 // chapter file with remove: true drops the chapter, and one whose requires_mods names a mod that isn't installed is
-// left out quietly. Groups merge by id the same way, the pack's winning.
+// left out quietly. Groups and reward tables merge by id the same way, the pack's winning.
 public final class BookMerger {
     private static final List<String> MERGED_LISTS = List.of("quests", "quest_links");
 
@@ -51,7 +51,7 @@ public final class BookMerger {
     }
 
     // The sources merged but not yet decoded.
-    public record Merged(CompoundTag settings, List<RawFile> groups, List<RawFile> chapters) {}
+    public record Merged(CompoundTag settings, List<RawFile> groups, List<RawFile> chapters, List<RawFile> tables) {}
 
     public static Merged merge(BookSources sources, Consumer<String> warnings) {
         CompoundTag settings = sources.settings().map(CompoundTag::copy).orElseGet(CompoundTag::new);
@@ -115,7 +115,28 @@ public final class BookMerger {
                 }
             }
         }
-        return new Merged(settings, List.copyOf(groups.values()), List.copyOf(chapters.values()));
+        // Reward tables: the mods', minus disabled ones, replaced (or removed) by the pack's.
+        Map<String, RawFile> tables = new LinkedHashMap<>();
+        List<RawFile> modTables = new ArrayList<>(sources.modTables());
+        modTables.sort(Comparator.comparing((RawFile file) -> file.source().orElse("")).thenComparing(RawFile::origin));
+        for (RawFile file : modTables) {
+            if (disabled.contains(file.source().orElse("")) || disabled.contains(file.id())) {
+                continue;
+            }
+            if (file.tag().getBooleanOr("remove", false)) {
+                tables.remove(file.id());
+            } else {
+                tables.put(file.id(), file);
+            }
+        }
+        for (RawFile file : sources.packTables()) {
+            if (file.tag().getBooleanOr("remove", false)) {
+                tables.remove(file.id());
+            } else {
+                tables.put(file.id(), new RawFile(file.id(), Optional.empty(), file.tag(), file.origin()));
+            }
+        }
+        return new Merged(settings, List.copyOf(groups.values()), List.copyOf(chapters.values()), List.copyOf(tables.values()));
     }
 
     // A pack chapter laid over a mod chapter (merge: true).
@@ -181,6 +202,19 @@ public final class BookMerger {
             }
             chapters.add(chapter.get().built(file.id(), file.source()));
         }
-        return QuestBook.build(settings, groups, chapters, warnings);
+        List<RewardTable> tables = new ArrayList<>();
+        for (RawFile file : merged.tables()) {
+            if (!QuestRef.isValidId(file.id())) {
+                warnings.accept(file.origin() + ": \"" + file.id() + "\" isn't a valid reward table id (lowercase letters, digits and _)");
+                continue;
+            }
+            DataResult<RewardTable> result = RewardTable.CODEC.parse(ops, file.tag());
+            if (result.result().isEmpty()) {
+                warnings.accept(file.origin() + ": " + result.error().map(DataResult.Error::message).orElse("unreadable"));
+                continue;
+            }
+            tables.add(result.result().get().withId(file.id(), file.source()));
+        }
+        return QuestBook.build(settings, groups, chapters, tables, warnings);
     }
 }

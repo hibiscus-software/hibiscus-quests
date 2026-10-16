@@ -18,12 +18,16 @@ import net.minecraft.gametest.framework.TestData;
 import net.minecraft.gametest.framework.TestEnvironmentDefinition;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Rotation;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModList;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.neoforge.event.RegisterGameTestsEvent;
 import net.neoforged.neoforge.registries.DeferredRegister;
+import net.neoforged.neoforge.transfer.energy.SimpleEnergyHandler;
 import software.hibiscus.hibiscusquests.HibiscusQuests;
 
 // Registers every Hibiscus Quests gametest, the same way Hibiscus Lib and Hibiscus Teams register theirs. All run in
@@ -80,6 +84,19 @@ public final class HibiscusQuestsGameTests {
         add("team_change_keep", TeamGameTests::keepWithTeam);
         add("team_change_copy", TeamGameTests::copyToNewTeam);
         add("team_change_merge", TeamGameTests::merge);
+        add("task_kill", WorldTaskGameTests::kill);
+        add("task_location", WorldTaskGameTests::location);
+        add("task_dimension", WorldTaskGameTests::dimension);
+        add("task_stat", WorldTaskGameTests::stat);
+        add("task_xp", WorldTaskGameTests::xp);
+        add("task_fluid", WorldTaskGameTests::fluid);
+        add("task_energy", WorldTaskGameTests::energy);
+        add("reward_choice", RewardTypeGameTests::choice);
+        add("reward_random_and_loot", RewardTypeGameTests::randomAndLoot);
+        add("reward_toast", RewardTypeGameTests::toast);
+        add("repeat_without_claiming", RewardTypeGameTests::repeatWithoutClaiming);
+        add("reward_tables_load", RewardTypeGameTests::rewardTablesLoad);
+        add("pins", RewardTypeGameTests::pins);
         // Only with Arcforge in the run (drop its jar in run/gameTestServer/mods/): its five custom triggers.
         if (ModList.get().isLoaded("arcforge")) {
             add("arcforge_triggers", IntegrationGameTests::arcforgeTriggers);
@@ -92,6 +109,12 @@ public final class HibiscusQuestsGameTests {
     public static void register(IEventBus modEventBus) {
         FUNCTIONS.register(modEventBus);
         modEventBus.addListener(HibiscusQuestsGameTests::registerTests);
+        // Vanilla has no item that holds energy, so in the gametest run a redstone block holds 100000 FE (always full:
+        // each look at it is a new store), for task_energy.
+        if (Boolean.getBoolean("hibiscusquests.gametest")) {
+            modEventBus.addListener((RegisterCapabilitiesEvent event) -> event.registerItem(Capabilities.Energy.ITEM,
+                    (stack, access) -> new SimpleEnergyHandler(100_000, 0, 100_000, 100_000), Items.REDSTONE_BLOCK));
+        }
     }
 
     private static void registerTests(RegisterGameTestsEvent event) {
