@@ -9,8 +9,12 @@ package software.hibiscus.hibiscusquests.book;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -25,6 +29,7 @@ import net.neoforged.fml.loading.FMLPaths;
 import software.hibiscus.hibiscuslib.util.SnbtFiles;
 import software.hibiscus.hibiscusquests.HibiscusQuests;
 import software.hibiscus.hibiscusquests.book.BookSources.RawFile;
+import org.jspecify.annotations.Nullable;
 
 // The pack's own book files, the ones the editor reads and writes:
 //   config/hibiscusquests/            (or <world>/serverconfig/hibiscusquests/ when that exists)
@@ -38,6 +43,8 @@ public final class PackFiles {
     public static final String GROUPS = "chapter_groups.snbt";
     public static final String CHAPTERS = "chapters";
     public static final String TABLES = "reward_tables";
+    // Where deleted chapters and tables go (the editor never deletes a file outright).
+    public static final String TRASH = ".trash";
     private static final String SUFFIX = ".snbt";
 
     private PackFiles() {}
@@ -125,6 +132,80 @@ public final class PackFiles {
         Tag tag = BookSettings.CODEC.encodeStart(ops, settings).getOrThrow(message -> new IllegalStateException("Can't write book settings: " + message));
         SnbtFiles.write(directory.resolve(SETTINGS), (CompoundTag) tag);
     }
+
+    // ---- the editor's writes: file tags as they are, by id ----
+
+    // Writes a chapter's file, chapters/<id>.snbt, and moves any other file that declares the same id to the trash
+    // (a hand-written file named differently), so the id isn't in the pack twice.
+    public static void writeChapterTag(Path directory, String id, CompoundTag tag) throws IOException {
+        writeById(directory, CHAPTERS, id, tag);
+    }
+
+    public static void trashChapter(Path directory, String id) throws IOException {
+        trashById(directory, CHAPTERS, id, null);
+    }
+
+    public static void writeTableTag(Path directory, String id, CompoundTag tag) throws IOException {
+        writeById(directory, TABLES, id, tag);
+    }
+
+    public static void trashTable(Path directory, String id) throws IOException {
+        trashById(directory, TABLES, id, null);
+    }
+
+    public static void writeSettingsTag(Path directory, CompoundTag tag) throws IOException {
+        SnbtFiles.write(directory.resolve(SETTINGS), tag);
+    }
+
+    public static void writeGroupsTag(Path directory, CompoundTag tag) throws IOException {
+        SnbtFiles.write(directory.resolve(GROUPS), tag);
+    }
+
+    private static void writeById(Path directory, String subdirectory, String id, CompoundTag tag) throws IOException {
+        Path file = directory.resolve(subdirectory).resolve(id + SUFFIX);
+        trashById(directory, subdirectory, id, file);
+        CompoundTag written = tag.copy();
+        written.putString("id", id);
+        SnbtFiles.write(file, written);
+    }
+
+    // Moves every file in the subdirectory whose id is this one to .trash/<subdirectory>/, except keep.
+    private static void trashById(Path directory, String subdirectory, String id, @Nullable Path keep) throws IOException {
+        Path dir = directory.resolve(subdirectory);
+        if (!Files.isDirectory(dir)) {
+            return;
+        }
+        List<Path> matches = new ArrayList<>();
+        try (Stream<Path> files = Files.list(dir)) {
+            for (Path file : files.filter(path -> path.getFileName().toString().endsWith(SUFFIX)).toList()) {
+                if (file.equals(keep)) {
+                    continue;
+                }
+                String name = file.getFileName().toString();
+                Optional<CompoundTag> tag;
+                try {
+                    tag = SnbtFiles.read(file);
+                } catch (IOException e) {
+                    tag = Optional.empty();
+                }
+                String fileId = tag.map(t -> chapterId(t, name)).orElse(name.substring(0, name.length() - SUFFIX.length()));
+                if (fileId.equals(id)) {
+                    matches.add(file);
+                }
+            }
+        }
+        if (matches.isEmpty()) {
+            return;
+        }
+        Path trash = directory.resolve(TRASH).resolve(subdirectory);
+        Files.createDirectories(trash);
+        String stamp = TRASH_STAMP.format(LocalDateTime.now());
+        for (Path file : matches) {
+            Files.move(file, trash.resolve(stamp + "-" + file.getFileName()), StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private static final DateTimeFormatter TRASH_STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss", Locale.ROOT);
 
     public static void writeGroups(Path directory, List<ChapterGroup> groups, DynamicOps<Tag> ops) throws IOException {
         Tag tag = ChapterGroup.FILE_CODEC.encodeStart(ops, groups).getOrThrow(message -> new IllegalStateException("Can't write chapter groups: " + message));

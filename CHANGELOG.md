@@ -22,7 +22,7 @@ date. How to cut a release is in [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
-Suggested version: 1.0.0 (the first release). Needs Hibiscus Lib 1.3.0 (its new text markup).
+Suggested version: 1.0.0 (the first release). Needs Hibiscus Lib 1.4.0 (its new text markup and `TextArea`).
 
 ### Added
 
@@ -94,5 +94,24 @@ Suggested version: 1.0.0 (the first release). Needs Hibiscus Lib 1.3.0 (its new 
   hides them). Pins are per player and saved.
 - **The Quest Book item**, crafted from a book and any dye, opens the book; `book.giveBookOnFirstJoin` hands one out.
 - **API 0.3.0**: `RewardContext.choice()`, the index picked in a choice dialog.
+- **The in-game editor**, for players with the `hibiscusquests.editor` permission (ops by default,
+  `editor.permissionLevel`), from the pencil in the book's top bar or `/hibiscusquests editing_mode [on|off] [player]`.
+  In edit mode the book shows every chapter and quest; right-click menus on the map add quests (by task type, then the
+  item or the one in your hand), quest links, images and labels; quests are selected by click, Shift-click or a box,
+  dragged (snapping to half the grid, Alt to place freely), nudged with the arrow keys, copied, cut, pasted (as text,
+  into any world's book) and duplicated; Ctrl-click toggles a dependency. A quest's menu edits its properties, tasks
+  and rewards, shape and size, moves it to another chapter, and resets or completes it for your team.
+- **Forms for everything**, built from the files' format: quests, tasks and rewards of every type (custom ones too),
+  chapters, groups, images, labels, quest links, reward tables and the book's settings, with pickers for items,
+  registries and tags, colours, and a description editor with a live preview.
+- **The chapter list in edit mode:** add, edit, reorder (drag or menu), regroup and delete chapters and groups; deleted
+  chapters' files go to `.trash/`. Mods' chapters are read-only until **Override** copies one into the pack.
+- **Reward tables** editor: tables, their rolls and loot crates, and entries (by item, or any reward type).
+- **Undo and redo** (Ctrl+Z, Ctrl+Y) for the editing session.
+- Every edit is checked on the server (permission, rate, and that it decodes as its file would), saved to the pack's
+  files at once, and sent to every player as a patch of just what changed.
+- `/hibiscusquests generate_chapter <title>`: a chapter with a quest for each item in the container you're looking at.
+- **API 0.4.0**: `TaskType.editorHints()` and `RewardType.editorHints()` (`FieldHint`), and `CustomEditors` for types
+  with an editor of their own.
 
 [Unreleased]: https://github.com/hibiscus-software/hibiscus-quests/commits/HEAD

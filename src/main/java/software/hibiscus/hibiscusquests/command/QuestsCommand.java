@@ -22,11 +22,16 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.PermissionLevel;
+import net.minecraft.world.Container;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import software.hibiscus.hibiscuslib.api.team.Team;
 import software.hibiscus.hibiscuslib.util.PermissionLevels;
 import software.hibiscus.hibiscuslib.util.Profiles;
@@ -39,6 +44,10 @@ import software.hibiscus.hibiscusquests.book.Quest;
 import software.hibiscus.hibiscusquests.book.QuestBook;
 import software.hibiscus.hibiscusquests.book.QuestTask;
 import software.hibiscus.hibiscusquests.config.QuestsConfig;
+import software.hibiscus.hibiscusquests.edit.BookEditor;
+import software.hibiscus.hibiscusquests.edit.ChapterGenerator;
+import software.hibiscus.hibiscusquests.edit.EditingMode;
+import software.hibiscus.hibiscusquests.edit.Ids;
 import software.hibiscus.hibiscusquests.network.QuestSync;
 import software.hibiscus.hibiscusquests.progress.ProgressManager;
 import software.hibiscus.hibiscusquests.progress.QuestClock;
@@ -46,9 +55,10 @@ import software.hibiscus.hibiscusquests.progress.QuestLogic;
 import software.hibiscus.hibiscusquests.progress.QuestTeams;
 import software.hibiscus.hibiscusquests.progress.TeamProgress;
 import software.hibiscus.hibiscusquests.task.CriterionTask;
+import org.jspecify.annotations.Nullable;
 
 // /hibiscusquests (alias /hquests). Players: open [quest], pin <quest> and claim_all. Ops (hibiscusquests.admin.* nodes): reload,
-// change_progress and debug. Player and team arguments take online or offline players by name (through Hibiscus
+// change_progress and debug; editors (hibiscusquests.editor): editing_mode and generate_chapter. Player and team arguments take online or offline players by name (through Hibiscus
 // Lib's Profiles), a team's short name, or a team id.
 public final class QuestsCommand {
     private static final SuggestionProvider<CommandSourceStack> QUESTS = (context, builder) -> {
@@ -110,7 +120,74 @@ public final class QuestsCommand {
                 .then(Commands.literal("debug")
                         .requires(PermissionLevels.requires(QuestPermissions.DEBUG, PermissionLevel.GAMEMASTERS))
                         .then(Commands.argument("quest", StringArgumentType.greedyString()).suggests(QUESTS)
-                                .executes(QuestsCommand::debug)));
+                                .executes(QuestsCommand::debug)))
+                .then(Commands.literal("editing_mode")
+                        .requires(PermissionLevels.requires(QuestPermissions.EDITOR, PermissionLevel.GAMEMASTERS))
+                        .executes(context -> editingMode(context, null, null))
+                        .then(Commands.literal("on")
+                                .executes(context -> editingMode(context, true, null))
+                                .then(Commands.argument("player", EntityArgument.player())
+                                        .executes(context -> editingMode(context, true, EntityArgument.getPlayer(context, "player")))))
+                        .then(Commands.literal("off")
+                                .executes(context -> editingMode(context, false, null))
+                                .then(Commands.argument("player", EntityArgument.player())
+                                        .executes(context -> editingMode(context, false, EntityArgument.getPlayer(context, "player"))))))
+                .then(Commands.literal("generate_chapter")
+                        .requires(PermissionLevels.requires(QuestPermissions.EDITOR, PermissionLevel.GAMEMASTERS))
+                        .then(Commands.argument("title", StringArgumentType.greedyString())
+                                .executes(QuestsCommand::generateChapter)));
+    }
+
+    // Turns edit mode on or off (or over, with no argument) for the player running it or another one. Putting someone
+    // else in edit mode lets them edit for the rest of their session, even without the editor permission.
+    private static int editingMode(CommandContext<CommandSourceStack> context, @Nullable Boolean on, @Nullable ServerPlayer target)
+            throws CommandSyntaxException {
+        ServerPlayer player = target != null ? target : context.getSource().getPlayerOrException();
+        boolean wanted = on != null ? on : !EditingMode.isEditing(player);
+        boolean editing = EditingMode.set(player, wanted, target != null && target != context.getSource().getPlayer());
+        context.getSource().sendSuccess(() -> Component.translatable(editing ? "hibiscusquests.command.editing.on" : "hibiscusquests.command.editing.off",
+                player.getDisplayName()), true);
+        return 1;
+    }
+
+    // A new chapter with an item task for each kind of item in the container the player is looking at, laid out on a
+    // grid: a quick start for a chapter of "collect these" quests.
+    private static int generateChapter(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        String title = StringArgumentType.getString(context, "title").strip();
+        HitResult hit = player.pick(player.blockInteractionRange(), 0, false);
+        Container container = hit instanceof BlockHitResult block && hit.getType() == HitResult.Type.BLOCK
+                && player.level().getBlockEntity(block.getBlockPos()) instanceof Container found ? found : null;
+        if (container == null) {
+            context.getSource().sendFailure(Component.translatable("hibiscusquests.command.generate.no_container"));
+            return 0;
+        }
+        List<ItemStack> stacks = new ArrayList<>();
+        for (int slot = 0; slot < container.getContainerSize(); slot++) {
+            ItemStack stack = container.getItem(slot);
+            if (stack.isEmpty()) {
+                continue;
+            }
+            Optional<ItemStack> same = stacks.stream().filter(other -> ItemStack.isSameItemSameComponents(other, stack)).findFirst();
+            if (same.isPresent()) {
+                same.get().grow(stack.getCount());
+            } else {
+                stacks.add(stack.copy());
+            }
+        }
+        if (stacks.isEmpty()) {
+            context.getSource().sendFailure(Component.translatable("hibiscusquests.command.generate.empty"));
+            return 0;
+        }
+        MinecraftServer server = context.getSource().getServer();
+        String chapterId = Ids.fromTitle(title, "chapter", BookManager.book().chapters().stream().map(Chapter::id).toList());
+        BookEditor.Result result = BookEditor.apply(server, ChapterGenerator.edits(server, chapterId, title, stacks));
+        if (!result.ok()) {
+            result.messages().forEach(message -> context.getSource().sendFailure(message));
+            return 0;
+        }
+        context.getSource().sendSuccess(() -> Component.translatable("hibiscusquests.command.generate.done", chapterId, stacks.size()), true);
+        return 1;
     }
 
     private static int open(CommandContext<CommandSourceStack> context, String quest) throws CommandSyntaxException {

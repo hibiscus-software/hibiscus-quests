@@ -241,6 +241,128 @@ def icon_pin():
     return img
 
 
+def icon_edit():
+    """A pencil, for edit mode and editing things."""
+    img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    px = img.load()
+    for i in range(9):
+        x, y = 3 + i, 12 - i
+        for (dx, dy) in ((0, 0), (1, 0), (0, -1), (1, -1)):
+            px[x + dx, y + dy] = rgba(GOLD if i < 7 else ACCENT)
+        px[x + 1, y + 1] = rgba(GOLD_DARK if i < 7 else ACCENT_DARK)
+    for (x, y) in ((2, 13), (3, 13), (2, 12)):
+        px[x, y] = rgba(TEXT)
+    px[1, 14] = rgba(TEXT_MUTED)
+    return img
+
+
+def icon_add():
+    """A plus, for adding things."""
+    img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    px = img.load()
+    for i in range(3, 13):
+        for w in (7, 8):
+            px[w, i] = rgba(TEXT)
+            px[i, w] = rgba(TEXT)
+    return img
+
+
+def icon_pick():
+    """A magnifying glass, for picking from a list."""
+    img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    px = img.load()
+    for y in range(16):
+        for x in range(16):
+            r = math.hypot(x + 0.5 - 6.5, y + 0.5 - 6.5)
+            if 3.0 <= r <= 4.6:
+                px[x, y] = rgba(TEXT)
+    for i in range(4):
+        for (dx, dy) in ((0, 0), (1, 0), (0, 1)):
+            px[10 + i + dx, 10 + i + dy] = rgba(TEXT_MUTED)
+    return img
+
+
+def icon_hand():
+    """An arrow down into a slot: take the item in your hand."""
+    img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    px = img.load()
+    for x in range(2, 14):
+        px[x, 14] = rgba(TEXT_MUTED)
+    for y in range(9, 15):
+        px[2, y] = rgba(TEXT_MUTED)
+        px[13, y] = rgba(TEXT_MUTED)
+    for y in range(1, 8):
+        px[7, y] = rgba(GOLD)
+        px[8, y] = rgba(GOLD_DARK)
+    for i in range(4):
+        for x in range(7 - i, 9 + i):
+            px[x, 11 - i] = rgba(GOLD)
+    return img
+
+
+def icon_arrow(up):
+    """A small arrow, for moving things up or down a list."""
+    img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    px = img.load()
+    for i in range(5):
+        y = 5 + i if up else 10 - i
+        for x in range(8 - i - 1, 8 + i + 1):
+            px[x, y] = rgba(TEXT)
+    return img
+
+
+def icon_delete():
+    """A cross, for taking things away."""
+    img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    px = img.load()
+    for i in range(3, 13):
+        for d in (0, 1):
+            px[i + d if i + d < 13 else i, i] = rgba(ACCENT)
+            px[15 - i - d if 15 - i - d > 2 else 15 - i, i] = rgba(ACCENT)
+    return img
+
+
+def icon_table():
+    """A die, for reward tables."""
+    img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    px = img.load()
+    face = {(x, y) for x in range(2, 14) for y in range(2, 14)}
+    paint(px, face, TEXT, "#FFFFFF", TEXT_MUTED)
+    for (x, y) in ((4, 4), (10, 4), (7, 7), (4, 10), (10, 10)):
+        for (dx, dy) in ((0, 0), (1, 0), (0, 1), (1, 1)):
+            px[x + dx, y + dy] = rgba(SHADOW)
+    return img
+
+
+def icon_settings():
+    """A gear, for the book's settings."""
+    img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    px = img.load()
+    cog = mask(16, lambda u, v: gear(u, v))
+    paint(px, cog, TEXT_MUTED, TEXT, TEXT_DISABLED)
+    for y in range(16):
+        for x in range(16):
+            if math.hypot(x + 0.5 - 8, y + 0.5 - 8) <= 2.2:
+                px[x, y] = (0, 0, 0, 0)
+    return img
+
+
+def icon_undo(redo):
+    """A curved arrow, for undo (pointing left) and redo (pointing right)."""
+    img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    px = img.load()
+    for y in range(16):
+        for x in range(16):
+            r = math.hypot(x + 0.5 - 8, y + 0.5 - 9)
+            if 3.0 <= r <= 4.6 and y + 0.5 <= 9.5:
+                px[x if not redo else 15 - x, y] = rgba(TEXT)
+    for i in range(4):
+        for y in range(9 - i, 10 + i):
+            x = 1 + i
+            px[x if not redo else 15 - x, y] = rgba(TEXT)
+    return img
+
+
 def item_quest_book():
     """The Quest Book item: the button's book, at item scale."""
     return icon_book()
@@ -306,6 +428,17 @@ def main():
     save("icon/panel_collapse", icon_panel(True))
     save("icon/panel_expand", icon_panel(False))
     save("icon/pin", icon_pin())
+    save("icon/edit", icon_edit())
+    save("icon/add", icon_add())
+    save("icon/pick", icon_pick())
+    save("icon/hand", icon_hand())
+    save("icon/up", icon_arrow(True))
+    save("icon/down", icon_arrow(False))
+    save("icon/delete", icon_delete())
+    save("icon/table", icon_table())
+    save("icon/settings", icon_settings())
+    save("icon/undo", icon_undo(False))
+    save("icon/redo", icon_undo(True))
     save_item("quest_book", item_quest_book())
     save_item("loot_crate", item_crate_band())
     save_item("loot_crate_frame", item_crate_frame())

@@ -13,6 +13,7 @@ import io.netty.buffer.ByteBuf;
 
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
@@ -21,10 +22,11 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.world.item.ItemStack;
 import software.hibiscus.hibiscusquests.HibiscusQuests;
+import software.hibiscus.hibiscusquests.edit.BookEdit;
 
-// Every payload Hibiscus Quests sends. Server to client: the book's hash, the book in chunks, and progress (all of it,
-// or the quests that changed). Client to server: asking for the book, claims and submits, which the server checks
-// (QuestNetwork).
+// Every payload Hibiscus Quests sends. Server to client: the book's hash, the book in chunks, patches to it after
+// edits, progress (all of it, or the quests that changed), and the editor's state. Client to server: asking for the
+// book, claims and submits, and the editor's edits, which the server checks (QuestNetwork).
 public final class QuestPayloads {
     private QuestPayloads() {}
 
@@ -105,7 +107,102 @@ public final class QuestPayloads {
         }
     }
 
+    // The book after an edit, as a patch (compressed NBT, see BookPatch) to the book with hash base; the result has
+    // hash book. A client with another book asks for the whole new one instead.
+    public record BookPatched(String base, String book, byte[] data) implements CustomPacketPayload {
+        public static final Type<BookPatched> TYPE = payloadType("book_patched");
+        public static final StreamCodec<ByteBuf, BookPatched> STREAM_CODEC = StreamCodec.composite(
+                ByteBufCodecs.STRING_UTF8, BookPatched::base,
+                ByteBufCodecs.STRING_UTF8, BookPatched::book,
+                ByteBufCodecs.byteArray(QuestSync.CHUNK_SIZE), BookPatched::data,
+                BookPatched::new);
+
+        @Override
+        public Type<BookPatched> type() {
+            return TYPE;
+        }
+    }
+
+    // Whether the player may use the editor (the top bar shows its button), and whether they're editing now.
+    public record EditorState(boolean canEdit, boolean editing) implements CustomPacketPayload {
+        public static final Type<EditorState> TYPE = payloadType("editor_state");
+        public static final StreamCodec<ByteBuf, EditorState> STREAM_CODEC = StreamCodec.composite(
+                ByteBufCodecs.BOOL, EditorState::canEdit,
+                ByteBufCodecs.BOOL, EditorState::editing,
+                EditorState::new);
+
+        @Override
+        public Type<EditorState> type() {
+            return TYPE;
+        }
+    }
+
+    // How an edit went: refused (and why), or saved with new warnings about the book.
+    public record EditResult(boolean ok, List<Component> messages) implements CustomPacketPayload {
+        public static final Type<EditResult> TYPE = payloadType("edit_result");
+        public static final StreamCodec<RegistryFriendlyByteBuf, EditResult> STREAM_CODEC = StreamCodec.composite(
+                ByteBufCodecs.BOOL, EditResult::ok,
+                ComponentSerialization.STREAM_CODEC.apply(ByteBufCodecs.list(64)), EditResult::messages,
+                EditResult::new);
+
+        @Override
+        public Type<EditResult> type() {
+            return TYPE;
+        }
+    }
+
+    // A registry's ids and tags, for the editor's pickers.
+    public record RegistryList(String registry, List<String> ids, List<String> tags) implements CustomPacketPayload {
+        public static final Type<RegistryList> TYPE = payloadType("registry_list");
+        public static final StreamCodec<ByteBuf, RegistryList> STREAM_CODEC = StreamCodec.composite(
+                ByteBufCodecs.STRING_UTF8, RegistryList::registry,
+                ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), RegistryList::ids,
+                ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), RegistryList::tags,
+                RegistryList::new);
+
+        @Override
+        public Type<RegistryList> type() {
+            return TYPE;
+        }
+    }
+
     // ---- Client to server ----
+
+    // Edits from the book's editor, applied together or not at all.
+    public record Edit(List<BookEdit> edits) implements CustomPacketPayload {
+        public static final int MAX_EDITS = 1024;
+        public static final Type<Edit> TYPE = payloadType("edit");
+        public static final StreamCodec<FriendlyByteBuf, Edit> STREAM_CODEC = BookEdit.STREAM_CODEC
+                .apply(ByteBufCodecs.list(MAX_EDITS)).map(Edit::new, Edit::edits);
+
+        @Override
+        public Type<Edit> type() {
+            return TYPE;
+        }
+    }
+
+    // Turn the editor on or off for the sender.
+    public record SetEditing(boolean editing) implements CustomPacketPayload {
+        public static final Type<SetEditing> TYPE = payloadType("set_editing");
+        public static final StreamCodec<ByteBuf, SetEditing> STREAM_CODEC = ByteBufCodecs.BOOL.map(SetEditing::new, SetEditing::editing);
+
+        @Override
+        public Type<SetEditing> type() {
+            return TYPE;
+        }
+    }
+
+    // "Send me this registry's ids and tags" (editors only).
+    public record RegistryRequest(String registry) implements CustomPacketPayload {
+        public static final Type<RegistryRequest> TYPE = payloadType("registry_request");
+        public static final StreamCodec<ByteBuf, RegistryRequest> STREAM_CODEC = ByteBufCodecs.stringUtf8(256)
+                .map(RegistryRequest::new, RegistryRequest::registry);
+
+        @Override
+        public Type<RegistryRequest> type() {
+            return TYPE;
+        }
+    }
 
     // "Send me the book with this hash" (the server only answers for its current book).
     public record BookRequest(String hash) implements CustomPacketPayload {

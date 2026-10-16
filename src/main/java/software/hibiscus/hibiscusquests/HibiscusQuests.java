@@ -35,6 +35,7 @@ import software.hibiscus.hibiscusquests.book.DataChapters;
 import software.hibiscus.hibiscusquests.command.QuestPermissions;
 import software.hibiscus.hibiscusquests.command.QuestsCommand;
 import software.hibiscus.hibiscusquests.config.QuestsConfig;
+import software.hibiscus.hibiscusquests.edit.EditingMode;
 import software.hibiscus.hibiscusquests.gametest.HibiscusQuestsGameTests;
 import software.hibiscus.hibiscusquests.network.QuestNetwork;
 import software.hibiscus.hibiscusquests.network.QuestSync;
@@ -73,6 +74,7 @@ public class HibiscusQuests {
         NeoForge.EVENT_BUS.addListener((ServerStoppedEvent event) -> {
             BookManager.onServerStopped();
             QuestSync.onServerStopped();
+            EditingMode.onServerStopped();
         });
         NeoForge.EVENT_BUS.addListener((ServerTickEvent.Post event) -> {
             ProgressManager.tick(event.getServer());
@@ -91,12 +93,14 @@ public class HibiscusQuests {
         if (event.getEntity() instanceof ServerPlayer player) {
             QuestSync.onLogin(player);
             ProgressManager.onLogin(player);
+            EditingMode.onLogin(player);
             giveBookOnFirstJoin(player);
         }
     }
 
     private static void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         QuestNetwork.forget(event.getEntity().getUUID());
+        EditingMode.onLogout(event.getEntity().getUUID());
         if (event.getEntity() instanceof ServerPlayer player) {
             ProgressManager.onLogout(player);
         }

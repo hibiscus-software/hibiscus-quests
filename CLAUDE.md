@@ -30,8 +30,11 @@ Hibiscus Teams (`hibiscusteams`, optional) progress is per party, without it eve
   functions, `ProgressManager` every change with its events, saving and sync, `ActiveTasks` which tasks each player is
   tracking, `ProgressStorage` the files), `task/` and `reward/` the built-in types (`CriterionTasks` plus
   `mixin/PlayerAdvancementsMixin` for criterion tasks), `network/` payloads and sync (`QuestSync`: the book in chunks
-  behind a content hash, progress as per-team deltas), `command/` `/hibiscusquests` (alias `/hquests`), `config/`,
-  `client/` the client's copy and screens, `gametest/` the tests.
+  behind a content hash, progress as per-team deltas, `BookPatch` an edit's changes), `edit/` the editor's server side
+  (`BookEdit` the edits, `BookEditor` checking and applying them to the pack's files, `EditingMode` who's editing),
+  `command/` `/hibiscusquests` (alias `/hquests`), `config/`, `client/` the client's copy and screens (`client/edit/`
+  the editor: `ClientEditor` state and undo, `EditActions` every action as edits, `Forms` and `FormPopup` the forms),
+  `gametest/` the tests.
 - Server-authoritative: the server owns the book and all progress. Every client action (claim, submit, edit) is a
   payload checked on the server (permission, state, `RateLimiter`); clients never decide what a player may do.
 - Book files: SNBT through `SnbtFiles` (sorted keys, atomic, `.bak`). The pack's live in `config/hibiscusquests/`

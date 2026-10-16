@@ -35,7 +35,7 @@ public final class QuestBook implements BookView {
     public static final Codec<QuestBook> NETWORK_CODEC = RecordCodecBuilder.create(i -> i.group(
             BookSettings.CODEC.fieldOf("settings").forGetter(QuestBook::settings),
             BookCodecs.list("groups", ChapterGroup.CODEC).forGetter(QuestBook::groups),
-            BookCodecs.list("chapters", Chapter.NETWORK_CODEC).forGetter(QuestBook::chapters),
+            BookCodecs.list("chapters", Chapter.NETWORK_CODEC).forGetter(QuestBook::sourceChapters),
             BookCodecs.list("reward_tables", RewardTable.NETWORK_CODEC).forGetter(book -> List.copyOf(book.tables.values())))
             .apply(i, (settings, groups, chapters, tables) -> build(settings, groups, chapters, tables, warning -> {})));
 
@@ -45,6 +45,10 @@ public final class QuestBook implements BookView {
     private final BookSettings settings;
     private final List<ChapterGroup> groups;
     private final List<Chapter> chapters;
+    // The chapters as they were given, before dependencies that point nowhere were dropped: what's sent to clients and
+    // what the editor edits, so a dependency on a quest that's missing for now comes back with the quest.
+    private final List<Chapter> sourceChapters;
+    private final Map<String, Chapter> sourceById;
     private final Map<String, Chapter> chaptersById;
     private final Map<QuestRef, Quest> quests;
     private final Map<QuestRef, List<QuestRef>> dependents;
@@ -52,8 +56,12 @@ public final class QuestBook implements BookView {
     private final Map<String, List<Requirement>> chapterRequirements;
     private final Map<String, RewardTable> tables;
 
-    private QuestBook(BookSettings settings, List<ChapterGroup> groups, List<Chapter> chapters, Map<QuestRef, Quest> quests,
-            Map<String, List<Requirement>> chapterRequirements, Map<String, RewardTable> tables) {
+    private QuestBook(BookSettings settings, List<ChapterGroup> groups, List<Chapter> chapters, List<Chapter> sourceChapters,
+            Map<QuestRef, Quest> quests, Map<String, List<Requirement>> chapterRequirements, Map<String, RewardTable> tables) {
+        this.sourceChapters = List.copyOf(sourceChapters);
+        Map<String, Chapter> sources = new LinkedHashMap<>();
+        sourceChapters.forEach(chapter -> sources.putIfAbsent(chapter.id(), chapter));
+        this.sourceById = Collections.unmodifiableMap(sources);
         this.tables = Collections.unmodifiableMap(tables);
         this.settings = settings;
         this.groups = List.copyOf(groups);
@@ -175,7 +183,7 @@ public final class QuestBook implements BookView {
                 }
             }
         }
-        return new QuestBook(settings, sortedGroups, cleanedChapters, quests, requirements, tables);
+        return new QuestBook(settings, sortedGroups, cleanedChapters, sortedChapters, quests, requirements, tables);
     }
 
     public Optional<RewardTable> table(String id) {
@@ -197,6 +205,15 @@ public final class QuestBook implements BookView {
     @Override
     public List<Chapter> chapters() {
         return chapters;
+    }
+
+    // The chapters before cleaning (see sourceChapters), in book order.
+    public List<Chapter> sourceChapters() {
+        return sourceChapters;
+    }
+
+    public Optional<Chapter> sourceChapter(String id) {
+        return Optional.ofNullable(sourceById.get(id));
     }
 
     @Override

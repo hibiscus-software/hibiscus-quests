@@ -42,6 +42,7 @@ import software.hibiscus.hibiscusquests.book.BookSources.RawFile;
 import software.hibiscus.hibiscusquests.book.Chapter;
 import software.hibiscus.hibiscusquests.book.PackFiles;
 import software.hibiscus.hibiscusquests.book.QuestBook;
+import software.hibiscus.hibiscusquests.book.RewardTable;
 import software.hibiscus.hibiscusquests.network.QuestSync;
 import software.hibiscus.hibiscusquests.progress.ProgressManager;
 import software.hibiscus.hibiscusquests.progress.ProgressStorage;
@@ -171,6 +172,8 @@ final class BookGameTests {
         QuestBook decoded = QuestSync.decode(bytes, ops);
         check(helper, decoded.chapters().size() == book.chapters().size() && decoded.questCount() == book.questCount(), "same chapters and quests");
         check(helper, decoded.chapter("demo_items").get().source().equals(book.chapter("demo_items").get().source()), "sources survive");
+        check(helper, decoded.table("treasure").flatMap(RewardTable::source).equals(book.table("treasure").flatMap(RewardTable::source)),
+                "tables' too");
         check(helper, QuestSync.hash(QuestSync.encode(decoded, ops)).equals(QuestSync.hash(bytes)), "the hash is stable");
         check(helper, QuestSync.bookHash().equals(QuestSync.hash(bytes)), "and matches what the server announces");
         helper.succeed();

@@ -57,17 +57,25 @@ import software.hibiscus.hibiscusquests.client.ClientBook;
 import software.hibiscus.hibiscusquests.client.ClientQuestState;
 import software.hibiscus.hibiscusquests.client.NodeState;
 import software.hibiscus.hibiscusquests.client.QuestDraw;
+import software.hibiscus.hibiscusquests.client.edit.ClientEditor;
+import software.hibiscus.hibiscusquests.client.edit.EditActions;
+import software.hibiscus.hibiscusquests.client.edit.ListEditorPopup;
+import software.hibiscus.hibiscusquests.client.edit.PickerPopup;
+import software.hibiscus.hibiscusquests.client.edit.RichTextPopup;
 import software.hibiscus.hibiscusquests.network.QuestPayloads;
 
 // The quest book: nearly the whole window. The chapter list down the left (collapsible to icons), a top bar with the
 // chapter's title and progress, search, Claim all and the team, and the chapter's map filling the rest; clicking a
 // quest opens its view over the map. Rebuilt on every sync, so everything it remembers (chapter, search, the list's
-// scroll, the map's view, the open quest) lives in fields or BookUiState, not widgets.
+// scroll, the map's view, the open quest) lives in fields or BookUiState, not widgets. Editors get an edit mode
+// button in the top bar; in edit mode the map and the chapter list take the editor's clicks, menus and keys
+// (EditorMenus), and a toolbar under the list adds chapters and groups and opens the reward tables and settings.
 public final class QuestBookScreen extends BaseScreen {
     private static final int TOP = 28;
     private static final int LIST_WIDTH = 128;
     private static final int LIST_COLLAPSED = 26;
     private static final int LIST_HEADER = 16;
+    private static final int TOOLBAR = 22;
     private static final int MAX_RESULTS = 8;
     private static final Identifier TEAMS_BUTTON = Identifier.fromNamespaceAndPath("hibiscusteams", "teams");
 
@@ -77,6 +85,11 @@ public final class QuestBookScreen extends BaseScreen {
     private boolean searchFocused;
     private double listScroll;
     private final BookCanvas canvas;
+    private final EditorMenus menus;
+    // What's being dragged in the list (edit mode: a chapter or group), and where the mouse is.
+    private @Nullable Component draggingLabel;
+    private double dragX;
+    private double dragY;
     private @Nullable ScrollPanel list;
     private @Nullable TextInput search;
     private @Nullable Panel results;
@@ -85,7 +98,24 @@ public final class QuestBookScreen extends BaseScreen {
     private QuestBookScreen(@Nullable Screen parent) {
         super(Component.translatable("hibiscusquests.book.title"), parent);
         this.collapsed = BookUiState.panelCollapsed();
-        this.canvas = new BookCanvas(quest -> openQuest(quest.ref()), this::openUrl);
+        this.canvas = new BookCanvas(quest -> openQuest(quest.ref()), this::openUrl, new BookCanvas.Editor() {
+            @Override
+            public void contextMenu(EditActions.@Nullable Element element, int mouseX, int mouseY, double gx, double gy) {
+                Chapter shown = chapter();
+                if (shown != null) {
+                    menus.canvasMenu(shown, element, mouseX, mouseY, gx, gy);
+                }
+            }
+
+            @Override
+            public void edit(EditActions.Element element) {
+                Chapter shown = chapter();
+                if (shown != null) {
+                    menus.edit(shown, element);
+                }
+            }
+        });
+        this.menus = new EditorMenus(this, canvas);
         this.chapterId = BookUiState.lastChapter().orElse(null);
     }
 
@@ -165,13 +195,18 @@ public final class QuestBookScreen extends BaseScreen {
                 return current.get();
             }
         }
-        Chapter first = visible.isEmpty() ? null : visible.getFirst();
-        chapterId = first == null ? null : first.id();
-        return first;
+        // The first chapter stands in, but chapterId is kept: a chapter just made shows once the server's patch brings it.
+        return visible.isEmpty() ? null : visible.getFirst();
+    }
+
+    EditorMenus menus() {
+        return menus;
     }
 
     @Override
     protected void initContent() {
+        boolean editing = ClientEditor.isEditing();
+        canvas.setEditing(editing);
         Chapter chapter = chapter();
         int top = panelY + 4;
 
@@ -191,10 +226,23 @@ public final class QuestBookScreen extends BaseScreen {
                     rebuildWidgets();
                 }).flat());
         int headerHeight = collapsed ? 0 : LIST_HEADER;
-        list = addRenderableWidget(new ScrollPanel(listX, listTop + headerHeight, listW, panelY + panelHeight - 4 - listTop - headerHeight,
+        int toolbar = editing && !collapsed ? TOOLBAR : 0;
+        list = addRenderableWidget(new ScrollPanel(listX, listTop + headerHeight, listW, panelY + panelHeight - 4 - listTop - headerHeight - toolbar,
                 Panel.Style.INSET));
         fillList(list, chapter);
         list.setScrollAmount(listScroll);
+        if (toolbar > 0) {
+            int buttonY = panelY + panelHeight - 4 - 20;
+            int step = Math.min(22, (listW + 2) / 4);
+            addRenderableWidget(new IconButton(listX, buttonY, 20, Icon.sprite(QuestDraw.ADD), Component.translatable("hibiscusquests.edit.new_chapter"),
+                    button -> menus.newChapter("")));
+            addRenderableWidget(new IconButton(listX + step, buttonY, 20, Icon.sprite(QuestDraw.PANEL_EXPAND),
+                    Component.translatable("hibiscusquests.edit.new_group"), button -> menus.newGroup()));
+            addRenderableWidget(new IconButton(listX + step * 2, buttonY, 20, Icon.sprite(QuestDraw.TABLE),
+                    Component.translatable("hibiscusquests.edit.tables"), button -> menus.tables()));
+            addRenderableWidget(new IconButton(listX + step * 3, buttonY, 20, Icon.sprite(QuestDraw.SETTINGS),
+                    Component.translatable("hibiscusquests.edit.settings"), button -> menus.settings()));
+        }
 
         // The map.
         int canvasX = listX + listW + 4;
@@ -234,6 +282,30 @@ public final class QuestBookScreen extends BaseScreen {
         claimAll.active = claimable > 0;
         addRenderableWidget(claimAll);
         right -= 4;
+        if (ClientEditor.canEdit()) {
+            right -= 20;
+            IconButton edit = new IconButton(right, top, 20, Icon.sprite(QuestDraw.EDIT),
+                    Component.translatable(editing ? "hibiscusquests.edit.mode_on" : "hibiscusquests.edit.mode_off"),
+                    button -> ClientEditor.setEditing(!ClientEditor.isEditing()));
+            if (!editing) {
+                edit.flat();
+            }
+            addRenderableWidget(edit);
+            right -= 4;
+            if (editing) {
+                right -= 20;
+                IconButton redo = new IconButton(right, top, 20, Icon.sprite(QuestDraw.REDO), Component.translatable("hibiscusquests.edit.redo"),
+                        button -> ClientEditor.redo()).flat();
+                redo.active = ClientEditor.canRedo();
+                addRenderableWidget(redo);
+                right -= 20;
+                IconButton undo = new IconButton(right, top, 20, Icon.sprite(QuestDraw.UNDO), Component.translatable("hibiscusquests.edit.undo"),
+                        button -> ClientEditor.undo()).flat();
+                undo.active = ClientEditor.canUndo();
+                addRenderableWidget(undo);
+                right -= 4;
+            }
+        }
         int searchWidth = Math.max(60, Math.min(130, panelWidth / 5));
         right -= searchWidth;
         search = new TextInput(right, top + 1, searchWidth, 18, Component.translatable("hibiscusquests.book.search"));
@@ -265,15 +337,34 @@ public final class QuestBookScreen extends BaseScreen {
         }
         for (ChapterGroup group : book.groups()) {
             List<Chapter> inGroup = chapters.stream().filter(chapter -> chapter.info().group().equals(group.id())).toList();
-            if (inGroup.isEmpty()) {
+            if (inGroup.isEmpty() && !ClientEditor.isEditing()) {
                 continue;
             }
             boolean folded = BookUiState.isFolded(group.id(), group.collapsed());
             if (!collapsed) {
+                ChapterRows.Editing editing = !ClientEditor.isEditing() ? null : new ChapterRows.Editing() {
+                    @Override
+                    public void menu(int mouseX, int mouseY) {
+                        menus.groupMenu(group, mouseX, mouseY);
+                    }
+
+                    @Override
+                    public void dragging(double mouseX, double mouseY) {
+                        draggingLabel = BookText.titleOr(group.title(), group.id());
+                        dragX = mouseX;
+                        dragY = mouseY;
+                    }
+
+                    @Override
+                    public void dropped(double mouseX, double mouseY) {
+                        draggingLabel = null;
+                        dropGroup(group, mouseX, mouseY);
+                    }
+                };
                 panel.add(new ChapterRows.GroupRow(width, group, folded, () -> {
                     BookUiState.setFolded(group.id(), !folded, group.collapsed());
                     rebuildWidgets();
-                }), 0, y);
+                }, editing), 0, y);
                 y += ChapterRows.GROUP_HEIGHT;
             }
             if (!folded || collapsed) {
@@ -286,9 +377,61 @@ public final class QuestBookScreen extends BaseScreen {
 
     private int addRow(ScrollPanel panel, Chapter chapter, @Nullable Chapter selected, int width, int y) {
         boolean isSelected = selected != null && selected.id().equals(chapter.id());
-        ChapterRows.ChapterRow row = new ChapterRows.ChapterRow(width, chapter, isSelected, collapsed, () -> selectChapter(chapter.id()));
+        ChapterRows.Editing editing = !ClientEditor.isEditing() ? null : new ChapterRows.Editing() {
+            @Override
+            public void menu(int mouseX, int mouseY) {
+                menus.chapterMenu(chapter, mouseX, mouseY);
+            }
+
+            @Override
+            public void dragging(double mouseX, double mouseY) {
+                draggingLabel = BookText.titleOr(chapter.title(), chapter.id());
+                dragX = mouseX;
+                dragY = mouseY;
+            }
+
+            @Override
+            public void dropped(double mouseX, double mouseY) {
+                draggingLabel = null;
+                dropChapter(chapter, mouseX, mouseY);
+            }
+        };
+        ChapterRows.ChapterRow row = new ChapterRows.ChapterRow(width, chapter, isSelected, collapsed, () -> selectChapter(chapter.id()), editing);
         panel.add(row, collapsed ? Math.max(0, (width - row.getWidth()) / 2) : 0, y);
         return y + row.getHeight() + (collapsed ? 2 : 1);
+    }
+
+    // A chapter dragged onto another row of the list: it goes just before that chapter (in its group), or to the
+    // end of the group whose heading it was dropped on.
+    private void dropChapter(Chapter moving, double mouseX, double mouseY) {
+        if (list == null || !EditActions.isEditable(moving.id())) {
+            return;
+        }
+        for (var child : list.children()) {
+            if (child instanceof ChapterRows.ChapterRow row && row.isMouseOver(mouseX, mouseY)) {
+                if (!row.chapter().id().equals(moving.id())) {
+                    EditActions.placeChapter(moving.id(), row.chapter().id(), EditActions.groupOf(row.chapter()));
+                }
+                return;
+            }
+            if (child instanceof ChapterRows.GroupRow row && row.isMouseOver(mouseX, mouseY)) {
+                EditActions.placeChapter(moving.id(), null, row.group().id());
+                return;
+            }
+        }
+    }
+
+    // A group's heading dragged onto another: it goes just before that group.
+    private void dropGroup(ChapterGroup moving, double mouseX, double mouseY) {
+        if (list == null) {
+            return;
+        }
+        for (var child : list.children()) {
+            if (child instanceof ChapterRows.GroupRow row && row.isMouseOver(mouseX, mouseY) && !row.group().id().equals(moving.id())) {
+                EditActions.placeGroup(moving.id(), row.group().id());
+                return;
+            }
+        }
     }
 
     // ---- search ----
@@ -386,7 +529,7 @@ public final class QuestBookScreen extends BaseScreen {
             return;
         }
         Optional<Chapter> chapter = ClientBook.book().chapter(ref.chapter());
-        if (chapter.isEmpty() || chapter.get().info().alwaysInvisible() || ClientBook.isLocked(chapter.get())) {
+        if (chapter.isEmpty() || (chapter.get().info().alwaysInvisible() && !ClientEditor.isEditing()) || ClientBook.isLocked(chapter.get())) {
             return;
         }
         topPopup().filter(popup -> popup instanceof QuestViewPopup).ifPresent(popup -> popup.close());
@@ -468,6 +611,21 @@ public final class QuestBookScreen extends BaseScreen {
         canvas.draw(graphics, font, covered ? -1 : mouseX, covered ? -1 : mouseY);
     }
 
+    // The chapter or group being dragged in the list, following the mouse.
+    @Override
+    protected void extractForeground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
+        if (draggingLabel == null) {
+            return;
+        }
+        HibiscusTheme theme = HibiscusTheme.current();
+        Component title = draggingLabel;
+        int width = font.width(title) + 8;
+        int x = (int) dragX + 6;
+        int y = (int) dragY - 6;
+        theme.panel(graphics, x, y, width, 14);
+        graphics.text(font, title, x + 4, y + 3, theme.text(), false);
+    }
+
     // ---- input ----
 
     @Override
@@ -485,12 +643,12 @@ public final class QuestBookScreen extends BaseScreen {
             setFocused(null);
             searchFocused = false;
         }
-        return event.button() == InputConstants.MOUSE_BUTTON_LEFT && canvas.mouseClicked(event.x(), event.y());
+        return canvas.mouseClicked(event, doubleClick);
     }
 
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
-        if (topPopup().isEmpty() && canvas.mouseDragged(event.x(), event.y(), dx, dy)) {
+        if (topPopup().isEmpty() && canvas.mouseDragged(event, dx, dy)) {
             return true;
         }
         return super.mouseDragged(event, dx, dy);
@@ -498,9 +656,10 @@ public final class QuestBookScreen extends BaseScreen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
-        if (topPopup().isEmpty() && event.button() == InputConstants.MOUSE_BUTTON_LEFT && canvas.mouseReleased(event.x(), event.y())) {
+        if (topPopup().isEmpty() && canvas.mouseReleased(event)) {
             return true;
         }
+        draggingLabel = null;
         return super.mouseReleased(event);
     }
 
@@ -525,6 +684,10 @@ public final class QuestBookScreen extends BaseScreen {
             if (typing && event.isEscape()) {
                 setFocused(null);
                 searchFocused = false;
+                return true;
+            }
+            Chapter shown = chapter();
+            if (!typing && ClientEditor.isEditing() && shown != null && menus.keyPressed(shown, event)) {
                 return true;
             }
             if (!typing) {
@@ -597,6 +760,48 @@ public final class QuestBookScreen extends BaseScreen {
         return topPopup().filter(QuestViewPopup.class::isInstance).map(QuestViewPopup.class::cast)
                 .flatMap(view -> view.rewardIcon(rewardId))
                 .map(icon -> new int[] {icon.getX() + icon.getWidth() / 2, icon.getY() + icon.getHeight() / 2});
+    }
+
+    // Edit mode: a selection on the map, and the editor's menus and dialogs.
+    public void selectQuests(List<String> ids) {
+        canvas.select(ids.stream().map(EditActions.Element::quest).toList());
+    }
+
+    public void showEditMenu(QuestRef quest) {
+        Chapter shown = chapter();
+        Optional<Quest> found = ClientBook.book().quest(quest);
+        if (shown != null && found.isPresent()) {
+            int x = Math.round(canvas.screenX(found.get().display().x()));
+            int y = Math.round(canvas.screenY(found.get().display().y()));
+            menus.canvasMenu(shown, EditActions.Element.quest(quest.quest()), x, y, found.get().display().x(), found.get().display().y());
+        }
+    }
+
+    public void showQuestForm(QuestRef quest) {
+        menus.editQuest(quest.chapter(), quest.quest());
+    }
+
+    public void showTaskList(QuestRef quest) {
+        openPopup(new ListEditorPopup(ListEditorPopup.Mode.TASKS, quest.chapter(), quest.quest()));
+    }
+
+    public void showItemPicker() {
+        openPopup(PickerPopup.items(Component.translatable("hibiscusquests.list.pick_item"), stack -> {}));
+    }
+
+    public void showRichText(QuestRef quest) {
+        ClientBook.book().quest(quest).ifPresent(found -> openPopup(new RichTextPopup(Component.translatable("hibiscusquests.field.description"),
+                String.join("\n", found.display().description()), quest.chapter(), text -> {})));
+    }
+
+    public void showTables() {
+        menus.tables();
+    }
+
+    public void closePopups() {
+        while (topPopup().isPresent()) {
+            topPopup().get().close();
+        }
     }
 
     public void showChoice(QuestRef quest, String rewardId, List<ItemStack> items, int picked) {

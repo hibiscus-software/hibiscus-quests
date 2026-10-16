@@ -22,6 +22,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.OnDatapackSyncEvent;
 import software.hibiscus.hibiscusquests.HibiscusQuests;
 import software.hibiscus.hibiscusquests.api.event.BookReloadedEvent;
+import software.hibiscus.hibiscusquests.book.BookSources.PackChange;
 import software.hibiscus.hibiscusquests.book.BookSources.RawFile;
 import software.hibiscus.hibiscusquests.network.QuestSync;
 import software.hibiscus.hibiscusquests.progress.ProgressManager;
@@ -40,6 +41,8 @@ public final class BookManager {
     // The pack files' problems from the last read, kept so every rebuild reports them.
     private static List<String> readWarnings = List.of();
     private static @Nullable MinecraftServer server;
+    // Tests point the pack somewhere of their own.
+    private static @Nullable Path packDirectoryOverride;
 
     private BookManager() {}
 
@@ -62,7 +65,18 @@ public final class BookManager {
     }
 
     public static Path packDirectory(MinecraftServer server) {
-        return PackFiles.directory(server);
+        return packDirectoryOverride != null ? packDirectoryOverride : PackFiles.directory(server);
+    }
+
+    // For tests: reads the pack from another directory (null: the real one again) and rebuilds.
+    public static void usePackDirectory(MinecraftServer running, @Nullable Path directory) {
+        packDirectoryOverride = directory;
+        reload(running);
+    }
+
+    // The pack's files as last read or edited (the editor checks edits against them).
+    public static BookSources packSources() {
+        return packSources;
     }
 
     public static void onServerStarting(MinecraftServer starting) {
@@ -101,30 +115,53 @@ public final class BookManager {
 
     private static void readPack(MinecraftServer running) {
         List<String> found = new ArrayList<>();
-        packSources = PackFiles.read(PackFiles.directory(running), found::add);
+        packSources = PackFiles.read(packDirectory(running), found::add);
         found.forEach(warning -> HibiscusQuests.LOGGER.warn("Quest book: {}", warning));
         readWarnings = found;
     }
 
     // Merges, decodes and installs the book, then brings everything that depends on it up to date.
     public static void rebuild(MinecraftServer running) {
+        install(running, build(running), warnings, null);
+    }
+
+    // The editor changed the pack's files (they're written already): the same rebuild from the pack's files in memory,
+    // and clients are sent just the parts that changed. Returns the new warnings.
+    public static List<String> onPackEdited(MinecraftServer running, PackChange change) {
+        packSources = packSources.withPackChange(change);
+        List<String> before = warnings;
+        QuestBook built = build(running);
+        install(running, built, warnings, change);
+        return warnings.stream().filter(warning -> !before.contains(warning)).toList();
+    }
+
+    private static QuestBook build(MinecraftServer running) {
         List<String> found = new ArrayList<>(readWarnings);
         BookSources sources = packSources.withModFiles(modChapters, modGroups, modTables);
         DynamicOps<Tag> ops = ops(running);
         QuestBook built = BookMerger.decode(BookMerger.merge(sources, found::add), ops, found::add);
         CriterionTasks.rebuild(built, ops, found::add);
         found.subList(readWarnings.size(), found.size()).forEach(warning -> HibiscusQuests.LOGGER.warn("Quest book: {}", warning));
-        install(running, built, found);
+        warnings = List.copyOf(found);
+        return built;
     }
 
-    // Puts a book in place (also used by tests and, later, edits).
+    // Puts a book in place (also used by tests).
     public static void install(MinecraftServer running, QuestBook built, List<String> found) {
+        install(running, built, found, null);
+    }
+
+    private static void install(MinecraftServer running, QuestBook built, List<String> found, @Nullable PackChange change) {
         book = built;
         warnings = List.copyOf(found);
         HibiscusQuests.LOGGER.info("Quest book: {} chapters, {} quests{}", built.chapters().size(), built.questCount(),
                 found.isEmpty() ? "" : ", " + found.size() + " warnings");
         NeoForge.EVENT_BUS.post(new BookReloadedEvent(built));
         ProgressManager.onBookChanged(running);
-        QuestSync.onBookChanged(running);
+        if (change == null) {
+            QuestSync.onBookChanged(running);
+        } else {
+            QuestSync.onBookPatched(running, change);
+        }
     }
 }

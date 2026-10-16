@@ -33,6 +33,8 @@ import software.hibiscus.hibiscuslib.client.gui.HibiscusToasts;
 import software.hibiscus.hibiscuslib.client.gui.Icon;
 import software.hibiscus.hibiscusquests.HibiscusQuests;
 import software.hibiscus.hibiscusquests.book.QuestBook;
+import software.hibiscus.hibiscusquests.client.edit.ClientEditor;
+import software.hibiscus.hibiscusquests.network.BookPatch;
 import software.hibiscus.hibiscusquests.network.QuestPayloads;
 import software.hibiscus.hibiscusquests.network.QuestSync;
 import software.hibiscus.hibiscusquests.progress.TeamProgress;
@@ -73,6 +75,11 @@ public final class ClientQuestState {
         return progress;
     }
 
+    // The hash of the book the client has (the server's, after a patch).
+    public static String hash() {
+        return hash;
+    }
+
     public static boolean hasBook() {
         return !hash.isEmpty();
     }
@@ -93,6 +100,11 @@ public final class ClientQuestState {
     private static void changed() {
         version++;
         LISTENERS.forEach(Runnable::run);
+    }
+
+    // Something screens show changed that isn't the book or progress (edit mode): rebuild them too.
+    public static void refresh() {
+        changed();
     }
 
     public static void onBookHash(String newHash) {
@@ -154,6 +166,22 @@ public final class ClientQuestState {
         }
     }
 
+    // An edit changed the book: apply the patch if it's for the book we have, otherwise fetch the new book whole.
+    // A patched book isn't cached on disk (the server's copy is what the hash names).
+    public static void onBookPatched(QuestPayloads.BookPatched payload) {
+        if (!payload.base().equals(hash) || incoming != null) {
+            onBookHash(payload.book());
+            return;
+        }
+        try {
+            BookPatch patch = BookPatch.CODEC.parse(ops(), QuestSync.decompress(payload.data())).getOrThrow(IllegalArgumentException::new);
+            install(payload.book(), patch.apply(book));
+        } catch (IOException | RuntimeException e) {
+            HibiscusQuests.LOGGER.warn("Couldn't apply a quest book patch; fetching the whole book", e);
+            onBookHash(payload.book());
+        }
+    }
+
     private static void install(String newHash, QuestBook newBook) {
         hash = newHash;
         book = newBook;
@@ -193,6 +221,7 @@ public final class ClientQuestState {
         progress = new TeamProgress(NOBODY);
         incoming = null;
         chunks = null;
+        ClientEditor.clear();
         changed();
     }
 

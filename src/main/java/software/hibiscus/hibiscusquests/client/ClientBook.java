@@ -24,6 +24,7 @@ import software.hibiscus.hibiscusquests.book.Quest;
 import software.hibiscus.hibiscusquests.book.QuestBook;
 import software.hibiscus.hibiscusquests.book.QuestReward;
 import software.hibiscus.hibiscusquests.book.QuestTask;
+import software.hibiscus.hibiscusquests.client.edit.ClientEditor;
 import software.hibiscus.hibiscusquests.progress.QuestClock;
 import software.hibiscus.hibiscusquests.progress.QuestLogic;
 import software.hibiscus.hibiscusquests.progress.QuestState;
@@ -188,11 +189,12 @@ public final class ClientBook {
 
     // ---- chapters ----
 
-    // The chapters players see in the list (always_invisible ones are only for editors).
+    // The chapters players see in the list (always_invisible ones are only for editors, who see every chapter).
     public static List<Chapter> visibleChapters() {
         List<Chapter> chapters = new ArrayList<>();
+        boolean editing = ClientEditor.isEditing();
         for (Chapter chapter : book().chapters()) {
-            if (!chapter.info().alwaysInvisible()) {
+            if (editing || !chapter.info().alwaysInvisible()) {
                 chapters.add(chapter);
             }
         }
@@ -203,8 +205,11 @@ public final class ClientBook {
         return QuestLogic.chapterStatus(book(), progress(), chapter.id());
     }
 
-    // Whether the chapter's gate (requires) still keeps it shut.
+    // Whether the chapter's gate (requires) still keeps it shut. Never for editors, who need to get in.
     public static boolean isLocked(Chapter chapter) {
+        if (ClientEditor.isEditing()) {
+            return false;
+        }
         for (QuestBook.Requirement requirement : book().requirements(chapter.id())) {
             if (requirement.chapter().isPresent()) {
                 if (!QuestLogic.chapterStatus(book(), progress(), requirement.chapter().get()).isCompleted()) {

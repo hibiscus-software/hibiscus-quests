@@ -41,9 +41,9 @@ Chapter ids are shared by every mod in the book, so prefix yours with your mod i
 
 Build the chapter in the in-game editor in a dev world, then export it as mod-ready files with
 `/hibiscusquests export_chapter <chapter> <your mod id>`; it writes them to
-`hibiscusquests_exports/data/<your mod id>/hibiscusquests/`, ready to copy into `src/main/resources/`. (The editor and
-`export_chapter` arrive with Hibiscus Quests 1.0.0; the files are the same either way, and can always be written by
-hand.)
+`hibiscusquests_exports/data/<your mod id>/hibiscusquests/`, ready to copy into `src/main/resources/`. (`export_chapter`
+arrives with Hibiscus Quests 1.0.0; until then, copy the chapter's file from `config/hibiscusquests/chapters/`. The
+files are the same either way, and can always be written by hand.)
 
 ### The chapter file
 
@@ -319,6 +319,36 @@ book shows when the chapter doesn't override them. Reward types work the same wa
 carries the player, their team, the quest and reward, whether it's a team reward, the members online, and `choice()`
 (the index picked in a choice dialog, or -1).
 
+### Your types in the book's editor
+
+The editor builds a form for every task and reward type from its codec's field names, so a custom type can be edited
+with no code: a field it can't place gets a text box for its SNBT value. To give fields the right controls (a toggle,
+a number box, a registry picker), return hints from `editorHints()` on your `TaskType` or `RewardType`:
+
+```java
+@Override
+public Map<String, FieldHint> editorHints() {
+    return Map.of(
+            "celsius", FieldHint.integer(),
+            "biome", FieldHint.idOrTag(Registries.BIOME),
+            "loud", FieldHint.bool());
+}
+```
+
+Hints also let the form show fields the codec leaves out of the file while they hold their default. The kinds are in
+`FieldHint.Kind`: text, long text (with a preview), toggles, numbers, choices, registry ids and tags with a searchable
+picker, item stacks, item lists, icons, colours, string lists, reward tables and quests.
+
+For a type that wants its own screen instead, register a `CustomEditor` from your client code:
+
+```java
+CustomEditors.registerTask(Identifier.fromNamespaceAndPath(MODID, "heat"), (value, save) ->
+        Minecraft.getInstance().gui.setScreen(new HeatTaskScreen(value, save)));
+```
+
+`value` is the task as written in its chapter file; call `save` with the edited compound (it's checked like any edit)
+and go back to the screen that was open.
+
 ### Events
 
 Posted on `NeoForge.EVENT_BUS` on the server thread:
@@ -337,7 +367,7 @@ opens on, if any.
 
 ## The book (for packs)
 
-The pack's own files, which the editor reads and writes, are in `config/hibiscusquests/` (or a world's
+The pack's own files, which the in-game editor reads and writes, are in `config/hibiscusquests/` (or a world's
 `serverconfig/hibiscusquests/`, which wins when it exists): `data.snbt` (settings), `chapter_groups.snbt` and
 `chapters/<id>.snbt`, in the same format as above. They're merged with the chapters mods ship:
 

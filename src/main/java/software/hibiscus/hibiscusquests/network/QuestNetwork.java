@@ -9,12 +9,15 @@ package software.hibiscus.hibiscusquests.network;
 import java.util.Optional;
 import java.util.UUID;
 
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import software.hibiscus.hibiscuslib.network.HibiscusNetwork;
 import software.hibiscus.hibiscuslib.util.RateLimiter;
 import software.hibiscus.hibiscusquests.api.QuestRef;
+import software.hibiscus.hibiscusquests.edit.BookEditor;
+import software.hibiscus.hibiscusquests.edit.EditingMode;
 import software.hibiscus.hibiscusquests.progress.ActiveTasks;
 import software.hibiscus.hibiscusquests.progress.ProgressManager;
 
@@ -23,11 +26,13 @@ import software.hibiscus.hibiscusquests.progress.ProgressManager;
 // complete or the task active for the sender's own team.
 public final class QuestNetwork {
     // Bumped whenever a payload changes; clients and servers must match.
-    public static final String VERSION = "3";
+    public static final String VERSION = "4";
 
     private static final RateLimiter BOOK_REQUESTS = new RateLimiter(3, 0.2);
     private static final RateLimiter CLAIMS = new RateLimiter(20, 10);
     private static final RateLimiter SUBMITS = new RateLimiter(10, 5);
+    private static final RateLimiter EDITS = new RateLimiter(40, 10);
+    private static final RateLimiter REGISTRIES = new RateLimiter(20, 2);
 
     private QuestNetwork() {}
 
@@ -38,6 +43,13 @@ public final class QuestNetwork {
                 .toClient(QuestPayloads.Progress.TYPE, QuestPayloads.Progress.STREAM_CODEC, (payload, context) -> ClientBridge.progress(payload))
                 .toClient(QuestPayloads.OpenBook.TYPE, QuestPayloads.OpenBook.STREAM_CODEC, (payload, context) -> ClientBridge.openBook(payload))
                 .toClient(QuestPayloads.Toast.TYPE, QuestPayloads.Toast.STREAM_CODEC, (payload, context) -> ClientBridge.toast(payload))
+                .toClient(QuestPayloads.BookPatched.TYPE, QuestPayloads.BookPatched.STREAM_CODEC, (payload, context) -> ClientBridge.bookPatched(payload))
+                .toClient(QuestPayloads.EditorState.TYPE, QuestPayloads.EditorState.STREAM_CODEC, (payload, context) -> ClientBridge.editorState(payload))
+                .toClient(QuestPayloads.EditResult.TYPE, QuestPayloads.EditResult.STREAM_CODEC, (payload, context) -> ClientBridge.editResult(payload))
+                .toClient(QuestPayloads.RegistryList.TYPE, QuestPayloads.RegistryList.STREAM_CODEC, (payload, context) -> ClientBridge.registryList(payload))
+                .toServer(QuestPayloads.Edit.TYPE, QuestPayloads.Edit.STREAM_CODEC, QuestNetwork::edit)
+                .toServer(QuestPayloads.SetEditing.TYPE, QuestPayloads.SetEditing.STREAM_CODEC, QuestNetwork::setEditing)
+                .toServer(QuestPayloads.RegistryRequest.TYPE, QuestPayloads.RegistryRequest.STREAM_CODEC, QuestNetwork::registryRequest)
                 .toServer(QuestPayloads.Pin.TYPE, QuestPayloads.Pin.STREAM_CODEC, QuestNetwork::pin)
                 .toServer(QuestPayloads.BookRequest.TYPE, QuestPayloads.BookRequest.STREAM_CODEC, QuestNetwork::bookRequest)
                 .toServer(QuestPayloads.Claim.TYPE, QuestPayloads.Claim.STREAM_CODEC, QuestNetwork::claim)
@@ -49,6 +61,8 @@ public final class QuestNetwork {
         BOOK_REQUESTS.forget(player);
         CLAIMS.forget(player);
         SUBMITS.forget(player);
+        EDITS.forget(player);
+        REGISTRIES.forget(player);
     }
 
     private static Optional<ServerPlayer> sender(IPayloadContext context) {
@@ -74,6 +88,27 @@ public final class QuestNetwork {
 
     private static void claimAll(QuestPayloads.ClaimAll payload, IPayloadContext context) {
         sender(context).filter(player -> CLAIMS.tryAcquire(player.getUUID())).ifPresent(ProgressManager::claimAll);
+    }
+
+    // An edit from the book's editor (BookEditor checks the sender is editing, and the edit itself).
+    private static void edit(QuestPayloads.Edit payload, IPayloadContext context) {
+        sender(context).ifPresent(player -> {
+            if (!EDITS.tryAcquire(player.getUUID())) {
+                QuestSync.sendEditResult(player, BookEditor.Result.failed(Component.translatable("hibiscusquests.edit.error.too_fast")));
+                return;
+            }
+            QuestSync.sendEditResult(player, BookEditor.applyFrom(player, payload.edits()));
+        });
+    }
+
+    private static void setEditing(QuestPayloads.SetEditing payload, IPayloadContext context) {
+        sender(context).filter(player -> SUBMITS.tryAcquire(player.getUUID()))
+                .ifPresent(player -> EditingMode.set(player, payload.editing(), false));
+    }
+
+    private static void registryRequest(QuestPayloads.RegistryRequest payload, IPayloadContext context) {
+        sender(context).filter(player -> EditingMode.isEditing(player) && REGISTRIES.tryAcquire(player.getUUID()))
+                .ifPresent(player -> QuestSync.sendRegistry(player, payload.registry()));
     }
 
     private static void submit(QuestPayloads.Submit payload, IPayloadContext context) {

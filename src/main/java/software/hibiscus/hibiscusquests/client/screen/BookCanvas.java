@@ -7,17 +7,24 @@
 package software.hibiscus.hibiscusquests.client.screen;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import org.jspecify.annotations.Nullable;
 
+import com.mojang.blaze3d.platform.InputConstants;
+
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -36,14 +43,23 @@ import software.hibiscus.hibiscusquests.book.Quest;
 import software.hibiscus.hibiscusquests.book.QuestTask;
 import software.hibiscus.hibiscusquests.client.BookUiState;
 import software.hibiscus.hibiscusquests.client.ClientBook;
+import software.hibiscus.hibiscusquests.client.ClientQuestState;
 import software.hibiscus.hibiscusquests.client.NodeState;
 import software.hibiscus.hibiscusquests.client.QuestDraw;
 import software.hibiscus.hibiscusquests.client.QuestsClientConfig;
+import software.hibiscus.hibiscusquests.client.edit.EditActions;
+import software.hibiscus.hibiscusquests.client.edit.EditActions.Element;
+import software.hibiscus.hibiscusquests.client.edit.EditActions.ElementKind;
 
 // The chapter map in the middle of the book: its quests as nodes on a grid, joined by dependency lines, with the
 // chapter's images and labels. Dragged to pan, the mouse wheel zooms (0.5x to 3x, about the mouse). Not a widget: the
 // screen draws it under its widgets and passes it the clicks they don't take, so search results and buttons over the
 // map always win. The view (zoom and pan) is kept per chapter in BookUiState.
+//
+// In edit mode it shows every quest (hidden ones too) and the editor works on it: click to select (Shift adds, a drag
+// on empty space selects a box), drag the selection to move it (snapping to half the grid; Alt places it freely),
+// Ctrl-click a node to make it a dependency of the selected quest or stop it being one, double-click a quest to open
+// it, and right-drag to pan; a right click without dragging asks the screen for a context menu.
 final class BookCanvas {
     // Grid pixels per unit at zoom 1, and a size-1 node's width.
     static final float GRID = 24;
@@ -52,34 +68,67 @@ final class BookCanvas {
     static final double MAX_ZOOM = 3.0;
     private static final double ZOOM_STEP = 1.15;
     private static final int DRAG_THRESHOLD = 3;
+    private static final double SNAP = 0.5;
 
     // A node on the map: a quest of this chapter, or a link showing a quest from another one.
     record Node(Quest quest, @Nullable QuestLink link, double gx, double gy, double size, String shape) {
         QuestRef ref() {
             return quest.ref();
         }
+
+        Element element() {
+            return link != null ? Element.link(link.id()) : Element.quest(quest.id());
+        }
     }
+
+    // What the screen does for the editor: a context menu for an element (or empty space, at a grid point), and
+    // editing an image or label (double-clicked).
+    interface Editor {
+        void contextMenu(@Nullable Element element, int mouseX, int mouseY, double gx, double gy);
+
+        void edit(Element element);
+    }
+
+    private enum Drag { NONE, PAN, MOVE, BOX }
 
     private final Consumer<Quest> openQuest;
     private final Consumer<String> openUrl;
+    private final Editor editor;
     private int x;
     private int y;
     private int width;
     private int height;
     private @Nullable Chapter chapter;
     private boolean locked;
+    private boolean editing;
     private double zoom = 1;
     private double panX;
     private double panY;
     private boolean pressed;
     private boolean dragged;
+    private int pressButton;
     private double pressX;
     private double pressY;
     private @Nullable QuestRef selected;
+    // Edit mode.
+    private final Set<Element> selection = new LinkedHashSet<>();
+    private Drag drag = Drag.NONE;
+    private @Nullable Element pressedOn;
+    private double moveX;
+    private double moveY;
+    // A move that's been sent: drawn where it's going until the book changes (the server's patch, or a refusal).
+    private double pendingX;
+    private double pendingY;
+    private int pendingVersion = -1;
+    private double boxX;
+    private double boxY;
+    private double mouseX;
+    private double mouseY;
 
-    BookCanvas(Consumer<Quest> openQuest, Consumer<String> openUrl) {
+    BookCanvas(Consumer<Quest> openQuest, Consumer<String> openUrl, Editor editor) {
         this.openQuest = openQuest;
         this.openUrl = openUrl;
+        this.editor = editor;
     }
 
     void setBounds(int x, int y, int width, int height) {
@@ -97,6 +146,13 @@ final class BookCanvas {
         this.selected = quest;
     }
 
+    void setEditing(boolean editing) {
+        if (this.editing != editing) {
+            selection.clear();
+        }
+        this.editing = editing;
+    }
+
     // Shows a chapter, at its remembered view or fitted to its quests.
     void show(@Nullable Chapter newChapter, boolean isLocked) {
         if (chapter != null && newChapter != null && chapter.id().equals(newChapter.id())) {
@@ -107,6 +163,7 @@ final class BookCanvas {
         saveView();
         chapter = newChapter;
         locked = isLocked;
+        selection.clear();
         if (chapter == null) {
             return;
         }
@@ -180,37 +237,134 @@ final class BookCanvas {
         return (float) (y + height / 2.0 + (gy * GRID - panY) * zoom);
     }
 
+    // Screen pixels to grid units.
+    double gridX(double sx) {
+        return ((sx - x - width / 2.0) / zoom + panX) / GRID;
+    }
+
+    double gridY(double sy) {
+        return ((sy - y - height / 2.0) / zoom + panY) / GRID;
+    }
+
+    static double snap(double value) {
+        return Math.round(value / SNAP) * SNAP;
+    }
+
+    // The grid point under the mouse, snapped, or the middle of the view when the mouse isn't over the map.
+    double[] gridAtMouse() {
+        double mx = contains(mouseX, mouseY) ? mouseX : x + width / 2.0;
+        double my = contains(mouseX, mouseY) ? mouseY : y + height / 2.0;
+        return new double[] {snap(gridX(mx)), snap(gridY(my))};
+    }
+
     float nodeSize(Node node) {
         return (float) (NODE * node.size() * zoom);
     }
 
-    // The nodes players see: the chapter's visible quests, and its links to other chapters' visible quests.
+    // The nodes players see: the chapter's visible quests, and its links to other chapters' visible quests (editors
+    // see them all).
     List<Node> nodes() {
         List<Node> nodes = new ArrayList<>();
-        if (chapter == null || locked) {
+        if (chapter == null || (locked && !editing)) {
             return nodes;
         }
         BookSettings settings = ClientBook.book().settings();
         double chapterSize = chapter.info().defaultSize().orElse(settings.defaultSize());
         String chapterShape = chapter.info().defaultShape().orElse(settings.defaultShape());
         for (Quest quest : chapter.quests()) {
-            if (ClientBook.isVisible(quest)) {
+            if (editing || ClientBook.isVisible(quest)) {
                 nodes.add(new Node(quest, null, quest.display().x(), quest.display().y(), quest.display().size().orElse(chapterSize),
                         quest.display().shape().orElse(chapterShape)));
             }
         }
         for (QuestLink link : chapter.links()) {
             QuestRef.parseRelative(link.quest(), chapter.id()).flatMap(ref -> ClientBook.book().quest(ref))
-                    .filter(ClientBook::isVisible)
+                    .filter(quest -> editing || ClientBook.isVisible(quest))
                     .ifPresent(quest -> nodes.add(new Node(quest, link, link.x(), link.y(), link.size().orElse(chapterSize),
                             link.shape().orElse(quest.display().shape().orElse(chapterShape)))));
         }
         return nodes;
     }
 
+    // ---- edit mode: selection and the offset a move draws ----
+
+    Set<Element> selection() {
+        return selection;
+    }
+
+    void select(Collection<Element> elements) {
+        selection.clear();
+        selection.addAll(elements);
+    }
+
+    void selectAll() {
+        selection.clear();
+        nodes().forEach(node -> selection.add(node.element()));
+        if (chapter != null) {
+            for (int n = 0; n < chapter.images().size(); n++) {
+                selection.add(Element.image(n));
+            }
+            for (int n = 0; n < chapter.labels().size(); n++) {
+                selection.add(Element.label(n));
+            }
+        }
+    }
+
+    // The one quest selected, for Ctrl-click dependencies and the like.
+    Optional<String> singleQuest() {
+        if (selection.size() != 1) {
+            return Optional.empty();
+        }
+        Element only = selection.iterator().next();
+        return only.kind() == ElementKind.QUEST ? Optional.of(only.key()) : Optional.empty();
+    }
+
+    // A move was sent: keep drawing the selection there until the book changes.
+    void movedBy(double dx, double dy) {
+        pendingX = dx;
+        pendingY = dy;
+        pendingVersion = ClientQuestState.version();
+    }
+
+    private double offsetX(Element element) {
+        if (!editing || !selection.contains(element)) {
+            return 0;
+        }
+        if (drag == Drag.MOVE && dragged) {
+            return moveX;
+        }
+        return pendingVersion == ClientQuestState.version() ? pendingX : 0;
+    }
+
+    private double offsetY(Element element) {
+        if (!editing || !selection.contains(element)) {
+            return 0;
+        }
+        if (drag == Drag.MOVE && dragged) {
+            return moveY;
+        }
+        return pendingVersion == ClientQuestState.version() ? pendingY : 0;
+    }
+
+    // The nodes where they're drawn (a selection being moved, or just moved, is drawn at its new place).
+    private List<Node> placedNodes() {
+        List<Node> placed = new ArrayList<>();
+        for (Node node : nodes()) {
+            Element element = node.element();
+            double dx = offsetX(element);
+            double dy = offsetY(element);
+            placed.add(dx == 0 && dy == 0 ? node : new Node(node.quest(), node.link(), node.gx() + dx, node.gy() + dy, node.size(), node.shape()));
+        }
+        return placed;
+    }
+
     // ---- drawing ----
 
     void draw(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
+        if (mouseX >= 0) {
+            this.mouseX = mouseX;
+            this.mouseY = mouseY;
+        }
         HibiscusTheme theme = HibiscusTheme.current();
         theme.inset(graphics, x, y, width, height);
         graphics.enableScissor(x + 1, y + 1, x + width - 1, y + height - 1);
@@ -221,7 +375,7 @@ final class BookCanvas {
             graphics.disableScissor();
             return;
         }
-        if (locked) {
+        if (locked && !editing) {
             graphics.blitSprite(RenderPipelines.GUI_TEXTURED, QuestDraw.LOCK, x + width / 2 - 8, y + height / 2 - 22, 16, 16);
             String message = ClientBook.book().settings().lockMessage();
             centred(graphics, font, message.isBlank() ? Component.translatable("hibiscusquests.book.chapter_locked") : BookText.component(message),
@@ -232,21 +386,40 @@ final class BookCanvas {
         drawGrid(graphics);
         drawImages(graphics, ImageLayer.BEHIND);
         drawLabels(graphics, font);
-        List<Node> nodes = nodes();
+        List<Node> nodes = placedNodes();
         drawLines(graphics, nodes);
         Node hovered = contains(mouseX, mouseY) ? nodeAt(nodes, mouseX, mouseY) : null;
         for (Node node : nodes) {
             float size = nodeSize(node);
             NodeState state = ClientBook.state(node.quest());
+            boolean isSelected = editing ? selection.contains(node.element()) : node.ref().equals(selected);
             QuestDraw.node(graphics, font, state, ClientBook.icon(node.quest()), node.shape(), screenX(node.gx()), screenY(node.gy()),
-                    size, (float) ClientBook.fraction(node.quest()), node == hovered, node.ref().equals(selected));
+                    size, (float) ClientBook.fraction(node.quest()), node == hovered, isSelected);
+            if (editing && isSelected) {
+                int half = Math.round(size / 2) + 3;
+                graphics.outline(Math.round(screenX(node.gx())) - half, Math.round(screenY(node.gy())) - half, half * 2, half * 2, theme.accent());
+            }
             if (node.link() != null) {
                 int badge = Math.max(6, Math.round(size / 3));
                 graphics.blitSprite(RenderPipelines.GUI_TEXTURED, QuestDraw.LINK, Math.round(screenX(node.gx()) - size / 2),
                         Math.round(screenY(node.gy()) + size / 2 - badge), badge, badge);
             }
+            if (editing && node.link() == null && !ClientBook.isVisible(node.quest())) {
+                // Players can't see this one yet (its hide mode): a dashed corner says so.
+                int corner = Math.round(screenX(node.gx()) + size / 2 - 3);
+                int top = Math.round(screenY(node.gy()) - size / 2);
+                graphics.fill(corner, top, corner + 3, top + 3, theme.textMuted());
+            }
         }
         drawImages(graphics, ImageLayer.FRONT);
+        if (editing && drag == Drag.BOX && dragged) {
+            int left = (int) Math.min(boxX, mouseX);
+            int top = (int) Math.min(boxY, mouseY);
+            int right = (int) Math.max(boxX, mouseX);
+            int bottom = (int) Math.max(boxY, mouseY);
+            graphics.fill(left, top, right, bottom, (theme.accent() & 0xFFFFFF) | 0x30000000);
+            graphics.outline(left, top, right - left, bottom - top, theme.accent());
+        }
         graphics.disableScissor();
         if (hovered != null && !pressed) {
             graphics.setComponentTooltipForNextFrame(font, tooltip(hovered), mouseX, mouseY);
@@ -295,7 +468,7 @@ final class BookCanvas {
         if (zoom < 0.75) {
             return;
         }
-        int color = QuestDraw.mix(HibiscusTheme.current().color(HibiscusTheme.RECESS), 0xFFFFFFFF, 0.06f);
+        int color = QuestDraw.mix(HibiscusTheme.current().color(HibiscusTheme.RECESS), 0xFFFFFFFF, editing ? 0.12f : 0.06f);
         double startGx = Math.floor((panX - width / 2.0 / zoom) / GRID);
         double startGy = Math.floor((panY - height / 2.0 / zoom) / GRID);
         for (double gy = startGy; screenY(gy) < y + height; gy++) {
@@ -311,14 +484,18 @@ final class BookCanvas {
         if (chapter == null) {
             return;
         }
-        for (CanvasImage image : chapter.images()) {
+        for (int n = 0; n < chapter.images().size(); n++) {
+            CanvasImage image = chapter.images().get(n);
             if (image.layer() != layer) {
                 continue;
             }
+            Element element = Element.image(n);
+            float cx = screenX(image.x() + offsetX(element));
+            float cy = screenY(image.y() + offsetY(element));
             float w = (float) (image.width() * GRID * zoom);
             float h = (float) (image.height() * GRID * zoom);
             graphics.pose().pushMatrix();
-            graphics.pose().translate(screenX(image.x()), screenY(image.y()));
+            graphics.pose().translate(cx, cy);
             graphics.pose().rotate((float) Math.toRadians(image.rotation()));
             if (image.image().texture().isPresent()) {
                 int alpha = Math.round((float) image.alpha() * 255) << 24;
@@ -330,6 +507,10 @@ final class BookCanvas {
                 QuestDraw.item(graphics, image.image().item(), -size / 2, -size / 2, size);
             }
             graphics.pose().popMatrix();
+            if (editing && selection.contains(element)) {
+                graphics.outline(Math.round(cx - w / 2) - 1, Math.round(cy - h / 2) - 1, Math.round(w) + 2, Math.round(h) + 2,
+                        HibiscusTheme.current().accent());
+            }
         }
     }
 
@@ -338,14 +519,24 @@ final class BookCanvas {
             return;
         }
         int defaultColor = HibiscusTheme.current().text();
-        for (CanvasLabel label : chapter.labels()) {
+        for (int n = 0; n < chapter.labels().size(); n++) {
+            CanvasLabel label = chapter.labels().get(n);
+            Element element = Element.label(n);
             Component text = BookText.component(label.text());
             float scale = (float) (label.scale() * zoom);
+            float cx = screenX(label.x() + offsetX(element));
+            float cy = screenY(label.y() + offsetY(element));
             graphics.pose().pushMatrix();
-            graphics.pose().translate(screenX(label.x()), screenY(label.y()));
+            graphics.pose().translate(cx, cy);
             graphics.pose().scale(scale, scale);
             graphics.text(font, text, -font.width(text) / 2, -4, label.color().map(rgb -> 0xFF000000 | rgb).orElse(defaultColor), false);
             graphics.pose().popMatrix();
+            if (editing && selection.contains(element)) {
+                float halfW = font.width(text) * scale / 2 + 2;
+                float halfH = 5 * scale + 1;
+                graphics.outline(Math.round(cx - halfW), Math.round(cy - halfH), Math.round(halfW * 2), Math.round(halfH * 2),
+                        HibiscusTheme.current().accent());
+            }
         }
     }
 
@@ -365,7 +556,8 @@ final class BookCanvas {
         int notDone = HibiscusTheme.current().color(HibiscusTheme.TEXT_DISABLED);
         float thickness = (float) Math.max(1, 1.5 * zoom);
         for (Node node : nodes) {
-            if (node.link() != null || node.quest().display().hideDependencyLines().orElse(chapterHides)) {
+            // Editors see every line, even hidden ones, so they can see what depends on what.
+            if (node.link() != null || (!editing && node.quest().display().hideDependencyLines().orElse(chapterHides))) {
                 continue;
             }
             NodeState target = ClientBook.state(node.quest());
@@ -401,7 +593,7 @@ final class BookCanvas {
         Quest quest = node.quest();
         NodeState state = ClientBook.state(quest);
         List<Component> lines = new ArrayList<>();
-        if (state == NodeState.SECRET) {
+        if (state == NodeState.SECRET && !editing) {
             lines.add(Component.translatable("hibiscusquests.book.secret").withStyle(ChatFormatting.GRAY));
             return lines;
         }
@@ -434,6 +626,13 @@ final class BookCanvas {
                         .withStyle(value >= task.target() ? ChatFormatting.GREEN : ChatFormatting.GRAY));
             }
         }
+        if (editing) {
+            lines.add(Component.literal(node.link() != null ? node.link().id() + " → " + quest.ref() : quest.ref().toString())
+                    .withStyle(ChatFormatting.DARK_GRAY));
+            if (!ClientBook.isVisible(quest)) {
+                lines.add(Component.translatable("hibiscusquests.edit.hidden_from_players").withStyle(ChatFormatting.DARK_GRAY));
+            }
+        }
         return lines;
     }
 
@@ -458,48 +657,227 @@ final class BookCanvas {
     }
 
     @Nullable Node nodeAt(double mx, double my) {
-        return contains(mx, my) ? nodeAt(nodes(), mx, my) : null;
+        return contains(mx, my) ? nodeAt(placedNodes(), mx, my) : null;
     }
 
-    boolean mouseClicked(double mx, double my) {
-        if (!contains(mx, my)) {
-            return false;
-        }
-        pressed = true;
-        dragged = false;
-        pressX = mx;
-        pressY = my;
-        return true;
-    }
-
-    boolean mouseDragged(double mx, double my, double dx, double dy) {
-        if (!pressed) {
-            return false;
-        }
-        if (!dragged && Math.hypot(mx - pressX, my - pressY) >= DRAG_THRESHOLD) {
-            dragged = true;
-        }
-        if (dragged) {
-            panX -= dx / zoom;
-            panY -= dy / zoom;
-        }
-        return true;
-    }
-
-    boolean mouseReleased(double mx, double my) {
-        if (!pressed) {
-            return false;
-        }
-        pressed = false;
-        if (dragged) {
-            return true;
+    // What's under the mouse in edit mode: a node, else a label, else an image (front ones first).
+    @Nullable Element elementAt(double mx, double my) {
+        if (!contains(mx, my) || chapter == null) {
+            return null;
         }
         Node node = nodeAt(mx, my);
         if (node != null) {
-            openQuest.accept(node.quest());
+            return node.element();
+        }
+        Font font = Minecraft.getInstance().font;
+        for (int n = chapter.labels().size() - 1; n >= 0; n--) {
+            CanvasLabel label = chapter.labels().get(n);
+            double scale = label.scale() * zoom;
+            double halfW = font.width(BookText.component(label.text())) * scale / 2 + 2;
+            double halfH = 5 * scale + 1;
+            if (Math.abs(mx - screenX(label.x())) <= halfW && Math.abs(my - screenY(label.y())) <= halfH) {
+                return Element.label(n);
+            }
+        }
+        for (int n = chapter.images().size() - 1; n >= 0; n--) {
+            CanvasImage image = chapter.images().get(n);
+            double w = image.width() * GRID * zoom / 2;
+            double h = image.height() * GRID * zoom / 2;
+            if (Math.abs(mx - screenX(image.x())) <= w && Math.abs(my - screenY(image.y())) <= h) {
+                return Element.image(n);
+            }
+        }
+        return null;
+    }
+
+    // Where an element sits on the grid.
+    private Optional<double[]> positionOf(Element element) {
+        if (chapter == null) {
+            return Optional.empty();
+        }
+        return switch (element.kind()) {
+            case QUEST -> chapter.quest(element.key()).map(quest -> new double[] {quest.display().x(), quest.display().y()});
+            case LINK -> chapter.links().stream().filter(link -> link.id().equals(element.key())).findFirst()
+                    .map(link -> new double[] {link.x(), link.y()});
+            case IMAGE -> element.index() < chapter.images().size()
+                    ? Optional.of(new double[] {chapter.images().get(element.index()).x(), chapter.images().get(element.index()).y()}) : Optional.empty();
+            case LABEL -> element.index() < chapter.labels().size()
+                    ? Optional.of(new double[] {chapter.labels().get(element.index()).x(), chapter.labels().get(element.index()).y()}) : Optional.empty();
+        };
+    }
+
+    boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        double mx = event.x();
+        double my = event.y();
+        if (!contains(mx, my)) {
+            return false;
+        }
+        int button = event.button();
+        if (!editing) {
+            if (button != InputConstants.MOUSE_BUTTON_LEFT) {
+                return false;
+            }
+            pressed = true;
+            dragged = false;
+            pressButton = button;
+            pressX = mx;
+            pressY = my;
+            drag = Drag.PAN;
             return true;
         }
-        imageAt(mx, my).flatMap(CanvasImage::click).ifPresent(this::clickImage);
+        pressed = true;
+        dragged = false;
+        pressButton = button;
+        pressX = mx;
+        pressY = my;
+        pressedOn = null;
+        if (button != InputConstants.MOUSE_BUTTON_LEFT) {
+            drag = Drag.PAN;
+            return true;
+        }
+        Element element = elementAt(mx, my);
+        if (element == null) {
+            if (!event.hasShiftDown()) {
+                selection.clear();
+            }
+            drag = Drag.BOX;
+            boxX = mx;
+            boxY = my;
+            return true;
+        }
+        Optional<String> selectedQuest = singleQuest();
+        if (event.hasControlDown() && selectedQuest.isPresent() && chapter != null
+                && (element.kind() == ElementKind.QUEST || element.kind() == ElementKind.LINK)) {
+            Node node = nodeAt(mx, my);
+            if (node != null && EditActions.isEditable(chapter.id())) {
+                EditActions.toggleDependency(chapter.id(), selectedQuest.get(), node.ref());
+            }
+            drag = Drag.NONE;
+            return true;
+        }
+        if (doubleClick) {
+            drag = Drag.NONE;
+            if (element.kind() == ElementKind.QUEST || element.kind() == ElementKind.LINK) {
+                Node node = nodeAt(mx, my);
+                if (node != null) {
+                    openQuest.accept(node.quest());
+                }
+            } else {
+                editor.edit(element);
+            }
+            return true;
+        }
+        if (event.hasShiftDown()) {
+            if (!selection.remove(element)) {
+                selection.add(element);
+            }
+        } else if (!selection.contains(element)) {
+            selection.clear();
+            selection.add(element);
+        }
+        pressedOn = element;
+        drag = Drag.MOVE;
+        moveX = 0;
+        moveY = 0;
+        return true;
+    }
+
+    boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
+        if (!pressed) {
+            return false;
+        }
+        double mx = event.x();
+        double my = event.y();
+        mouseX = mx;
+        mouseY = my;
+        if (!dragged && Math.hypot(mx - pressX, my - pressY) >= DRAG_THRESHOLD) {
+            dragged = true;
+        }
+        if (!dragged) {
+            return true;
+        }
+        switch (drag) {
+            case PAN -> {
+                panX -= dx / zoom;
+                panY -= dy / zoom;
+            }
+            case MOVE -> {
+                double rawX = (mx - pressX) / zoom / GRID;
+                double rawY = (my - pressY) / zoom / GRID;
+                Optional<double[]> anchor = pressedOn == null ? Optional.empty() : positionOf(pressedOn);
+                if (event.hasAltDown() || anchor.isEmpty()) {
+                    moveX = rawX;
+                    moveY = rawY;
+                } else {
+                    // The node grabbed lands on the half grid; the rest of the selection moves with it.
+                    moveX = snap(anchor.get()[0] + rawX) - anchor.get()[0];
+                    moveY = snap(anchor.get()[1] + rawY) - anchor.get()[1];
+                }
+            }
+            default -> {
+            }
+        }
+        return true;
+    }
+
+    boolean mouseReleased(MouseButtonEvent event) {
+        if (!pressed || event.button() != pressButton) {
+            return false;
+        }
+        pressed = false;
+        double mx = event.x();
+        double my = event.y();
+        Drag was = drag;
+        drag = Drag.NONE;
+        if (!editing) {
+            if (dragged) {
+                return true;
+            }
+            Node node = nodeAt(mx, my);
+            if (node != null) {
+                openQuest.accept(node.quest());
+                return true;
+            }
+            imageAt(mx, my).flatMap(CanvasImage::click).ifPresent(this::clickImage);
+            return true;
+        }
+        switch (was) {
+            case MOVE -> {
+                if (dragged && chapter != null && (moveX != 0 || moveY != 0) && EditActions.isEditable(chapter.id())) {
+                    EditActions.move(chapter.id(), List.copyOf(selection), moveX, moveY);
+                    movedBy(moveX, moveY);
+                }
+            }
+            case BOX -> {
+                if (dragged) {
+                    double left = Math.min(boxX, mx);
+                    double right = Math.max(boxX, mx);
+                    double top = Math.min(boxY, my);
+                    double bottom = Math.max(boxY, my);
+                    for (Node node : placedNodes()) {
+                        double sx = screenX(node.gx());
+                        double sy = screenY(node.gy());
+                        if (sx >= left && sx <= right && sy >= top && sy <= bottom) {
+                            selection.add(node.element());
+                        }
+                    }
+                }
+            }
+            case PAN -> {
+                if (!dragged && pressButton == InputConstants.MOUSE_BUTTON_RIGHT) {
+                    Element element = elementAt(mx, my);
+                    if (element != null && !selection.contains(element)) {
+                        selection.clear();
+                        selection.add(element);
+                    }
+                    editor.contextMenu(element, (int) mx, (int) my, snap(gridX(mx)), snap(gridY(my)));
+                }
+            }
+            default -> {
+            }
+        }
+        moveX = 0;
+        moveY = 0;
         return true;
     }
 

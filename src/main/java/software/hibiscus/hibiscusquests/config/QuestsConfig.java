@@ -25,6 +25,7 @@ public final class QuestsConfig {
     public static final ModConfigSpec.BooleanValue LOOT_CRATE_DROPS;
     public static final ModConfigSpec.IntValue MAX_PINNED;
     public static final ModConfigSpec.BooleanValue GIVE_BOOK;
+    public static final ModConfigSpec.IntValue EDITOR_LEVEL;
 
     static {
         BUILDER.push("progress");
@@ -60,6 +61,13 @@ public final class QuestsConfig {
         GIVE_BOOK = BUILDER
                 .comment("Give each player a Quest Book item the first time they join (the inventory button opens the book anyway).")
                 .define("giveBookOnFirstJoin", false);
+        BUILDER.pop();
+
+        BUILDER.push("editor");
+        EDITOR_LEVEL = BUILDER
+                .comment("The op level that may edit the book in game (the hibiscusquests.editor permission node's default; a",
+                        "permissions mod can grant the node more finely). 2 is ops; 0 lets everyone edit.")
+                .defineInRange("permissionLevel", 2, 0, 4);
         BUILDER.pop();
 
         BUILDER.push("announcements");

@@ -20,17 +20,22 @@ import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 import com.mojang.serialization.DynamicOps;
 
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
@@ -38,7 +43,9 @@ import software.hibiscus.hibiscuslib.network.HibiscusNetwork;
 import software.hibiscus.hibiscusquests.HibiscusQuests;
 import software.hibiscus.hibiscusquests.api.QuestRef;
 import software.hibiscus.hibiscusquests.book.BookManager;
+import software.hibiscus.hibiscusquests.book.BookSources.PackChange;
 import software.hibiscus.hibiscusquests.book.QuestBook;
+import software.hibiscus.hibiscusquests.edit.BookEditor;
 import software.hibiscus.hibiscusquests.progress.ProgressManager;
 import software.hibiscus.hibiscusquests.progress.QuestTeams;
 import software.hibiscus.hibiscusquests.progress.TeamProgress;
@@ -74,6 +81,66 @@ public final class QuestSync {
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             sendBookHash(player);
         }
+    }
+
+    // An edit changed some of the book: clients that have the book from before get just the change (BookPatch), unless
+    // it's too big for one payload, when they're sent the new book's hash and fetch it whole.
+    public static void onBookPatched(MinecraftServer server, PackChange change) {
+        String base = bookHash;
+        QuestBook book = BookManager.book();
+        DynamicOps<Tag> ops = BookManager.ops(server);
+        byte[] patch = new byte[0];
+        try {
+            bookBytes = encode(book, ops);
+            Tag tag = BookPatch.CODEC.encodeStart(ops, BookPatch.of(book, change)).getOrThrow(message -> new IOException("Can't encode the patch: " + message));
+            patch = compress((CompoundTag) tag);
+        } catch (IOException | RuntimeException e) {
+            HibiscusQuests.LOGGER.error("Couldn't encode the quest book for clients", e);
+        }
+        bookHash = hash(bookBytes);
+        boolean whole = base.isEmpty() || patch.length == 0 || patch.length > CHUNK_SIZE;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (whole) {
+                sendBookHash(player);
+            } else {
+                send(player, new QuestPayloads.BookPatched(base, bookHash, patch));
+            }
+        }
+    }
+
+    public static void sendEditResult(ServerPlayer player, BookEditor.Result result) {
+        send(player, new QuestPayloads.EditResult(result.ok(), result.messages().stream().limit(64).toList()));
+    }
+
+    public static void sendEditorState(ServerPlayer player, boolean canEdit, boolean editing) {
+        send(player, new QuestPayloads.EditorState(canEdit, editing));
+    }
+
+    // A registry's ids and tags for the editor's pickers. Dimensions and advancements aren't registries the server
+    // keeps that way, so they're listed from the server's levels and advancements.
+    public static void sendRegistry(ServerPlayer player, String registry) {
+        Identifier id = Identifier.tryParse(registry);
+        if (id == null) {
+            return;
+        }
+        MinecraftServer server = player.level().getServer();
+        List<String> ids = new ArrayList<>();
+        List<String> tags = new ArrayList<>();
+        if (id.equals(Registries.DIMENSION.identifier())) {
+            server.levelKeys().forEach(key -> ids.add(key.identifier().toString()));
+        } else if (id.equals(Registries.ADVANCEMENT.identifier())) {
+            server.getAdvancements().getAllAdvancements().forEach(holder -> ids.add(holder.id().toString()));
+        } else {
+            Optional<? extends Registry<?>> found = server.registryAccess().lookup(ResourceKey.createRegistryKey(id));
+            if (found.isEmpty()) {
+                return;
+            }
+            found.get().keySet().forEach(key -> ids.add(key.toString()));
+            found.get().getTags().forEach(named -> tags.add(named.key().location().toString()));
+        }
+        ids.sort(null);
+        tags.sort(null);
+        send(player, new QuestPayloads.RegistryList(registry, ids, tags));
     }
 
     public static void onServerStopped() {
@@ -170,9 +237,17 @@ public final class QuestSync {
 
     public static byte[] encode(QuestBook book, DynamicOps<Tag> ops) throws IOException {
         Tag tag = QuestBook.NETWORK_CODEC.encodeStart(ops, book).getOrThrow(message -> new IOException("Can't encode the book: " + message));
+        return compress((CompoundTag) tag);
+    }
+
+    public static byte[] compress(CompoundTag tag) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        NbtIo.writeCompressed((CompoundTag) tag, out);
+        NbtIo.writeCompressed(tag, out);
         return out.toByteArray();
+    }
+
+    public static CompoundTag decompress(byte[] bytes) throws IOException {
+        return NbtIo.readCompressed(new ByteArrayInputStream(bytes), NbtAccounter.unlimitedHeap());
     }
 
     public static QuestBook decode(byte[] bytes, DynamicOps<Tag> ops) throws IOException {

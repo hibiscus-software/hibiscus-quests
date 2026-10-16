@@ -30,14 +30,15 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.transfer.energy.SimpleEnergyHandler;
 import software.hibiscus.hibiscusquests.HibiscusQuests;
 
-// Registers every Hibiscus Quests gametest, the same way Hibiscus Lib and Hibiscus Teams register theirs. All run in
-// one batch on an empty structure; ./gradlew runGameTestServer runs them (and Lib's) and exits, failing the build if
+// Registers every Hibiscus Quests gametest, the same way Hibiscus Lib and Hibiscus Teams register theirs. They run in
+// one batch on an empty structure (the editor's in a second one); ./gradlew runGameTestServer runs them (and Lib's) and exits, failing the build if
 // any fails. The book they use is the built-in demo data pack, which the gametest run switches on.
 public final class HibiscusQuestsGameTests {
     private static final DeferredRegister<Consumer<GameTestHelper>> FUNCTIONS = DeferredRegister.create(Registries.TEST_FUNCTION, HibiscusQuests.MODID);
 
-    // Every test, by name.
+    // Every test, by name; the editor's run in a batch of their own afterwards (they rebuild the book).
     private static final Map<String, Consumer<GameTestHelper>> TESTS = new LinkedHashMap<>();
+    private static final Map<String, Consumer<GameTestHelper>> EDITOR_TESTS = new LinkedHashMap<>();
 
     // A test that may throw (file access); a throw fails it.
     @FunctionalInterface
@@ -46,7 +47,11 @@ public final class HibiscusQuestsGameTests {
     }
 
     private static void add(String name, Test test) {
-        TESTS.put(name, helper -> {
+        add(TESTS, name, test);
+    }
+
+    private static void add(Map<String, Consumer<GameTestHelper>> tests, String name, Test test) {
+        tests.put(name, helper -> {
             try {
                 test.run(helper);
             } catch (RuntimeException e) {
@@ -101,7 +106,13 @@ public final class HibiscusQuestsGameTests {
         if (ModList.get().isLoaded("arcforge")) {
             add("arcforge_triggers", IntegrationGameTests::arcforgeTriggers);
         }
+        add(EDITOR_TESTS, "editor_edits", EditorGameTests::edits);
+        add(EDITOR_TESTS, "editor_override", EditorGameTests::override);
+        add(EDITOR_TESTS, "editor_tables_groups_settings", EditorGameTests::tablesGroupsSettings);
+        add(EDITOR_TESTS, "editor_permission", EditorGameTests::permission);
+        add(EDITOR_TESTS, "editor_generate_chapter", EditorGameTests::generate);
         TESTS.forEach((name, test) -> FUNCTIONS.register(name, () -> test));
+        EDITOR_TESTS.forEach((name, test) -> FUNCTIONS.register(name, () -> test));
     }
 
     private HibiscusQuestsGameTests() {}
@@ -122,6 +133,11 @@ public final class HibiscusQuestsGameTests {
         TestData<Holder<TestEnvironmentDefinition<?>>> data = new TestData<>(environment, Level.OVERWORLD, Identifier.withDefaultNamespace("empty"),
                 200, 0, true, Rotation.NONE, false, 1, 1, false, 8);
         TESTS.keySet().forEach(name -> event.registerTest(id(name), new FunctionGameTestInstance(function(name), data)));
+        // The editor's tests rebuild the book, so they get an environment (a batch) of their own, one at a time.
+        Holder<TestEnvironmentDefinition<?>> editor = event.registerEnvironment(id("editor"));
+        TestData<Holder<TestEnvironmentDefinition<?>>> editorData = new TestData<>(editor, Level.OVERWORLD, Identifier.withDefaultNamespace("empty"),
+                200, 0, true, Rotation.NONE, false, 1, 1, false, 8);
+        EDITOR_TESTS.keySet().forEach(name -> event.registerTest(id(name), new FunctionGameTestInstance(function(name), editorData)));
     }
 
     static Identifier id(String path) {

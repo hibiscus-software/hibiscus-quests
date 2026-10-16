@@ -108,6 +108,7 @@ final class RewardTypeGameTests {
         RewardTable treasure = BookManager.book().table("treasure").orElse(null);
         check(helper, treasure != null && treasure.rolls() == 2 && treasure.entries().size() == 5, "the demo pack's treasure table loads");
         check(helper, treasure.lootCrate().isPresent() && treasure.lootCrate().get().drops().boss() == 1.0, "with its crate");
+        check(helper, treasure.source().isPresent(), "from the data pack that ships it");
         check(helper, Math.abs(treasure.chance(treasure.entries().getFirst()) - 0.4) < 1e-9, "40 of 100 weight is 40%");
         RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
         check(helper, RewardTable.CODEC.parse(ops, parse("{title: \"A\", entries: [{type: \"xp\", amount: 1}]}")).isSuccess(),

@@ -9,6 +9,7 @@ package software.hibiscus.hibiscusquests.screenshots;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.nio.file.Files;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
@@ -23,6 +24,7 @@ import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.server.IntegratedServer;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
@@ -43,8 +45,16 @@ import software.hibiscus.hibiscusquests.api.QuestRef;
 import software.hibiscus.hibiscusquests.book.BookManager;
 import software.hibiscus.hibiscusquests.book.Chapter;
 import software.hibiscus.hibiscusquests.book.Quest;
+import software.hibiscus.hibiscusquests.client.ClientBook;
+import software.hibiscus.hibiscusquests.client.ClientQuestState;
+import software.hibiscus.hibiscusquests.client.edit.ClientEditor;
+import software.hibiscus.hibiscusquests.client.edit.EditActions;
 import software.hibiscus.hibiscusquests.client.screen.QuestBookScreen;
+import software.hibiscus.hibiscusquests.edit.BookEdit;
+import software.hibiscus.hibiscusquests.edit.BookEditor;
+import software.hibiscus.hibiscusquests.edit.EditingMode;
 import software.hibiscus.hibiscusquests.item.LootCrateItem;
+import software.hibiscus.hibiscusquests.network.QuestSync;
 import software.hibiscus.hibiscusquests.progress.ProgressManager;
 import software.hibiscus.hibiscusquests.progress.QuestTeams;
 
@@ -218,6 +228,14 @@ public final class ScreenshotHarness {
 
     private static void plan(Minecraft minecraft) {
         UUID self = minecraft.player.getUUID();
+        // Edits go to a pack in a temporary directory, so the run leaves config/ alone.
+        onServer(minecraft, server -> {
+            try {
+                BookManager.usePackDirectory(server, Files.createTempDirectory("hibiscusquests-screenshots"));
+            } catch (IOException e) {
+                HibiscusQuests.LOGGER.warn("Screenshot harness: no temporary pack", e);
+            }
+        });
         int[][] sizes = {{1280, 720, 1}, {1280, 720, 2}, {1280, 720, 3}, {1440, 960, 4}};
         for (int[] size : sizes) {
             String tag = size[0] + "x" + size[1] + "_scale" + size[2];
@@ -327,6 +345,115 @@ public final class ScreenshotHarness {
             // Back in the world: the pinned quests in their corner, and the book and crates on the hotbar.
             then(() -> minecraft.gui.setScreen(null), 10);
             shot("hud_" + tag);
+            editorShots(minecraft, self, tag);
+        }
+    }
+
+    // Edit mode on the tour chapter (overridden into the temporary pack so it can be edited): a selection, a quest's
+    // menu, its form, its task list, the item picker, the description editor and the reward tables.
+    private static void editorShots(Minecraft minecraft, UUID self, String tag) {
+        QuestRef tools = new QuestRef(TOUR, "tools");
+        onServer(minecraft, server -> {
+            ServerPlayer player = server.getPlayerList().getPlayer(self);
+            if (player != null) {
+                EditingMode.set(player, true, false);
+                if (BookManager.book().chapter(TOUR).flatMap(Chapter::source).isPresent()) {
+                    BookEditor.apply(server, List.of(new BookEdit.Override(TOUR)));
+                }
+            }
+        });
+        then(() -> {
+            QuestBookScreen.open();
+            QuestBookScreen screen = book(minecraft);
+            if (screen != null) {
+                screen.showChapter(TOUR);
+                screen.fitMap();
+                screen.selectQuests(List.of("logs", "tools"));
+                moveMouse(minecraft, screen.width - 4, screen.height - 4);
+            }
+        }, 10);
+        shot("edit_book_" + tag);
+        // Real edits through the client: move two quests down a step and undo it, add a quest and undo that. Each
+        // comes back as a patch, which must leave the client with the server's book.
+        double[] before = new double[1];
+        then(() -> {
+            before[0] = questY("logs");
+            EditActions.move(TOUR, List.of(EditActions.Element.quest("logs"), EditActions.Element.quest("tools")), 0, 1);
+        }, 20);
+        shot("edit_moved_" + tag);
+        then(() -> {
+            report("a move reaches the book", questY("logs") == before[0] + 1);
+            report("as a patch, to the server's book", ClientQuestState.hash().equals(QuestSync.bookHash()));
+            ClientEditor.undo();
+        }, 20);
+        then(() -> {
+            report("undo puts it back", questY("logs") == before[0]);
+            CompoundTag task = new CompoundTag();
+            task.putString("type", "checkmark");
+            EditActions.createQuest(TOUR, 8, 3, "Harness Quest", task);
+        }, 20);
+        then(() -> {
+            report("a new quest arrives", ClientBook.book().quest(new QuestRef(TOUR, "harness_quest")).isPresent());
+            ClientEditor.undo();
+        }, 20);
+        then(() -> {
+            report("and undo removes it", ClientBook.book().quest(new QuestRef(TOUR, "harness_quest")).isEmpty());
+            report("the client still has the server's book", ClientQuestState.hash().equals(QuestSync.bookHash()));
+            withBook(minecraft, screen -> screen.selectQuests(List.of("logs", "tools")));
+        }, 5);
+        then(() -> withBook(minecraft, screen -> screen.showEditMenu(tools)), 5);
+        shot("edit_menu_" + tag);
+        then(() -> withBook(minecraft, screen -> {
+            screen.closePopups();
+            screen.showQuestForm(tools);
+        }), 5);
+        shot("edit_form_" + tag);
+        then(() -> withBook(minecraft, screen -> {
+            screen.closePopups();
+            screen.showTaskList(tools);
+        }), 5);
+        shot("edit_tasks_" + tag);
+        then(() -> withBook(minecraft, screen -> {
+            screen.closePopups();
+            screen.showItemPicker();
+        }), 5);
+        shot("edit_picker_" + tag);
+        then(() -> withBook(minecraft, screen -> {
+            screen.closePopups();
+            screen.showRichText(new QuestRef(TOUR, "start"));
+        }), 5);
+        shot("edit_text_" + tag);
+        then(() -> withBook(minecraft, screen -> {
+            screen.closePopups();
+            screen.showTables();
+        }), 5);
+        shot("edit_tables_" + tag);
+        then(() -> withBook(minecraft, QuestBookScreen::closePopups), 2);
+        onServer(minecraft, server -> {
+            ServerPlayer player = server.getPlayerList().getPlayer(self);
+            if (player != null) {
+                EditingMode.set(player, false, false);
+            }
+        });
+        then(() -> {
+            moveMouse(minecraft, minecraft.getWindow().getGuiScaledWidth() / 2, minecraft.getWindow().getGuiScaledHeight() / 2);
+            minecraft.gui.setScreen(null);
+        }, 10);
+    }
+
+    private static double questY(String id) {
+        return ClientBook.book().quest(new QuestRef(TOUR, id)).map(quest -> quest.display().y()).orElse(Double.NaN);
+    }
+
+    // Logs a check on the editor's round trip (the harness has no assertions of its own; grep the log for FAILED).
+    private static void report(String what, boolean ok) {
+        HibiscusQuests.LOGGER.info("Screenshot harness check: {}: {}", what, ok ? "ok" : "FAILED");
+    }
+
+    private static void withBook(Minecraft minecraft, Consumer<QuestBookScreen> action) {
+        QuestBookScreen screen = book(minecraft);
+        if (screen != null) {
+            action.accept(screen);
         }
     }
 

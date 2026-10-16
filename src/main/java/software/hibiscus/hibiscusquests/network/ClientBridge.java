@@ -8,6 +8,7 @@ package software.hibiscus.hibiscusquests.network;
 
 import software.hibiscus.hibiscusquests.api.QuestRef;
 import software.hibiscus.hibiscusquests.client.ClientQuestState;
+import software.hibiscus.hibiscusquests.client.edit.ClientEditor;
 import software.hibiscus.hibiscusquests.client.screen.QuestBookScreen;
 
 // The step from a payload handler to client code. The handlers are registered on both sides but only ever run on a
@@ -29,6 +30,22 @@ final class ClientBridge {
 
     static void toast(QuestPayloads.Toast payload) {
         ClientQuestState.onToast(payload);
+    }
+
+    static void bookPatched(QuestPayloads.BookPatched payload) {
+        ClientQuestState.onBookPatched(payload);
+    }
+
+    static void editorState(QuestPayloads.EditorState payload) {
+        ClientEditor.onState(payload.canEdit(), payload.editing());
+    }
+
+    static void editResult(QuestPayloads.EditResult payload) {
+        ClientEditor.onResult(payload.ok(), payload.messages());
+    }
+
+    static void registryList(QuestPayloads.RegistryList payload) {
+        ClientEditor.onRegistryList(payload.registry(), payload.ids(), payload.tags());
     }
 
     static void openBook(QuestPayloads.OpenBook payload) {

@@ -15,6 +15,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
 
+import org.jspecify.annotations.Nullable;
+
 import com.mojang.blaze3d.platform.InputConstants;
 
 import net.minecraft.client.Minecraft;
@@ -36,7 +38,6 @@ import net.minecraft.world.item.Items;
 import software.hibiscus.hibiscuslib.client.HibiscusClientNetwork;
 import software.hibiscus.hibiscuslib.client.gui.HibiscusTheme;
 import software.hibiscus.hibiscuslib.client.gui.Icon;
-import software.hibiscus.hibiscuslib.client.gui.TextLayout;
 import software.hibiscus.hibiscuslib.client.gui.popup.Popup;
 import software.hibiscus.hibiscuslib.client.gui.widget.HibiscusButton;
 import software.hibiscus.hibiscuslib.client.gui.widget.HibiscusWidget;
@@ -61,6 +62,9 @@ import software.hibiscus.hibiscusquests.book.UsesRewardTable;
 import software.hibiscus.hibiscusquests.client.ClientBook;
 import software.hibiscus.hibiscusquests.client.NodeState;
 import software.hibiscus.hibiscusquests.client.QuestDraw;
+import software.hibiscus.hibiscusquests.client.edit.ClientEditor;
+import software.hibiscus.hibiscusquests.client.edit.EditActions;
+import software.hibiscus.hibiscusquests.client.edit.ListEditorPopup;
 import software.hibiscus.hibiscusquests.network.QuestPayloads;
 import software.hibiscus.hibiscusquests.progress.QuestClock;
 import software.hibiscus.hibiscusquests.progress.QuestLogic;
@@ -151,7 +155,16 @@ final class QuestViewPopup extends Popup {
             pin.flat();
         }
         add(pin);
-        add(new Header(getX() + 6, getY() + 6, getWidth() - 46, quest));
+        boolean editable = ClientEditor.isEditing() && EditActions.isEditable(quest.chapter());
+        if (editable) {
+            add(new IconButton(getX() + getWidth() - 54, getY() + 4, 14, Icon.sprite(QuestDraw.EDIT),
+                    Component.translatable("hibiscusquests.edit.menu.edit_quest"), button -> {
+                        if (screen() instanceof QuestBookScreen book) {
+                            book.menus().editQuest(quest.chapter(), quest.id());
+                        }
+                    }));
+        }
+        add(new Header(getX() + 6, getY() + 6, getWidth() - (editable ? 64 : 46), quest));
         body = new ScrollPanel(getX() + 4, getY() + HEADER, getWidth() - 8, getHeight() - HEADER - 4, Panel.Style.INSET);
         add(body);
         fillBody(quest, body.contentWidth());
@@ -161,7 +174,9 @@ final class QuestViewPopup extends Popup {
     private void fillBody(Quest quest, int width) {
         int y = 0;
         NodeState state = ClientBook.state(quest);
-        boolean hidden = state == NodeState.SECRET;
+        boolean editing = ClientEditor.isEditing();
+        boolean editable = editing && EditActions.isEditable(quest.chapter());
+        boolean hidden = state == NodeState.SECRET && !editing;
         List<List<String>> pages = quest.display().pages();
         boolean hasText = pages.stream().anyMatch(lines -> lines.stream().anyMatch(line -> !line.isBlank()));
         if (hasText && !hidden) {
@@ -178,11 +193,12 @@ final class QuestViewPopup extends Popup {
             }
             y += 2;
         }
-        if (!quest.tasks().isEmpty() && !hidden) {
-            y = heading(Component.translatable("hibiscusquests.book.tasks"), width, y);
+        if ((!quest.tasks().isEmpty() || editable) && !hidden) {
+            y = heading(Component.translatable("hibiscusquests.book.tasks"), width, y,
+                    editable ? () -> openList(ListEditorPopup.Mode.TASKS, quest) : null);
             List<QuestTask> active = QuestLogic.activeTasks(ClientBook.book(), ClientBook.progress(), quest, QuestClock.now());
             for (QuestTask task : quest.tasks()) {
-                if (task.hideUntilStarted() && ClientBook.progress().state(quest.ref()) == null) {
+                if (task.hideUntilStarted() && ClientBook.progress().state(quest.ref()) == null && !editing) {
                     continue;
                 }
                 body.add(taskRow(quest, task, active.contains(task), width), 0, y);
@@ -190,10 +206,11 @@ final class QuestViewPopup extends Popup {
             }
             y += 4;
         }
-        if (!quest.rewards().isEmpty() && !hidden) {
-            y = heading(Component.translatable("hibiscusquests.book.rewards"), width, y);
+        if ((!quest.rewards().isEmpty() || editable) && !hidden) {
+            y = heading(Component.translatable("hibiscusquests.book.rewards"), width, y,
+                    editable ? () -> openList(ListEditorPopup.Mode.REWARDS, quest) : null);
             for (QuestReward reward : quest.rewards()) {
-                if (reward.autoClaim() == AutoClaim.INVISIBLE) {
+                if (reward.autoClaim() == AutoClaim.INVISIBLE && !editing) {
                     continue;
                 }
                 body.add(rewardRow(quest, reward, width), 0, y);
@@ -225,8 +242,24 @@ final class QuestViewPopup extends Popup {
     }
 
     private int heading(Component text, int width, int y) {
-        body.add(new Caption(width, text.copy().withStyle(style -> style.withBold(true)), true), 0, y);
+        return heading(text, width, y, null);
+    }
+
+    // A section's heading; in edit mode, with a button that edits the section's list.
+    private int heading(Component text, int width, int y, @Nullable Runnable edit) {
+        body.add(new Caption(width - (edit != null ? 18 : 0), text.copy().withStyle(style -> style.withBold(true)), true), 0, y);
+        if (edit != null) {
+            body.add(new IconButton(0, 0, 14, Icon.sprite(QuestDraw.EDIT), Component.translatable("hibiscusquests.edit.edit_list"),
+                    button -> edit.run()), width - 14, y - 2);
+            return y + 14;
+        }
         return y + 12;
+    }
+
+    private void openList(ListEditorPopup.Mode mode, Quest quest) {
+        if (screen() != null) {
+            screen().openPopup(new ListEditorPopup(mode, quest.chapter(), quest.id()));
+        }
     }
 
     private void turn(int by) {

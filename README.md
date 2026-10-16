@@ -13,7 +13,7 @@ it, every player has their own.
 ![A chapter of the quest book](docs/images/book.png)
 
 > **In development.** The book works end to end (the files, the rules, the screens, every task and reward type,
-> reward tables, saving and syncing); the in-game editor is next.
+> reward tables, the in-game editor, saving and syncing); localisation, import and export are next.
 
 ## The book
 
@@ -48,6 +48,35 @@ Search (Ctrl+F) finds quests by title, description or task. Tab and the arrow ke
 then the book. A toast tells you when you finish a quest or chapter.
 
 ![A quest complete toast](docs/images/toast.png)
+
+## Editing in game
+
+Ops (anyone with the `hibiscusquests.editor` permission) get a pencil in the book's top bar. In edit mode the book
+shows every quest and chapter, hidden ones too, and edits go straight into the pack's files, so every player sees
+them as they're made.
+
+![Edit mode](docs/images/edit-book.png)
+
+- **On the map:** right-click empty space for a new quest (pick its first task's type, then the item, or the item in
+  your hand), a quest link, an image, a text label or Paste. Click to select, Shift-click or drag a box to select
+  more, drag to move (it snaps to half the grid; hold Alt to place freely), and arrow keys nudge. Ctrl-click another
+  quest to make it a dependency of the selected one, or stop it being one. Right-drag pans; double-click opens a
+  quest.
+- **On a quest:** right-click for its properties, tasks, rewards, shape and size, Move to chapter, Copy id,
+  Duplicate, resetting or completing it for your team, and Delete. The quest view has edit buttons too.
+- **Keys:** Ctrl+Z and Ctrl+Y undo and redo; Ctrl+C, Ctrl+X, Ctrl+V and Ctrl+D copy, cut, paste and duplicate (the
+  clipboard is text, so it pastes into another world's book too); Ctrl+A selects all; Delete deletes.
+- **The chapter list:** right-click a chapter or group to edit, move or delete it, or drag it into place. The buttons
+  under the list add a chapter or group and open the reward tables and the book's settings. A deleted chapter's file
+  goes to `.trash/` in the pack's folder.
+- **Mods' chapters** show a lock: they're read-only until you **Override** one, which copies it into the pack's files.
+
+<p><img src="docs/images/edit-form.png" width="380" alt="A quest's properties">
+<img src="docs/images/edit-menu.png" width="380" alt="A quest's menu"></p>
+
+Every form is built from the files' format, so it edits whatever the file can hold; fields left empty keep their
+defaults. Descriptions get an editor with a live preview. `/hibiscusquests generate_chapter <title>` makes a chapter
+with a quest for each item in the chest you're looking at, to start from.
 
 ## For modpack authors
 
@@ -117,8 +146,11 @@ Ship your quests in your jar under `data/<your mod id>/hibiscusquests/`, with no
 | `reload` | ops (`hibiscusquests.admin.reload`) | reads the pack's files again |
 | `change_progress <player\|team> <reset\|complete> <quest\|chapter\|*>` | ops (`hibiscusquests.admin.change_progress`) | a quest is `chapter/quest`; players may be offline; a team is its short name or id |
 | `debug <quest>` | ops (`hibiscusquests.admin.debug`) | why the quest is locked, and each task's progress (for someone else: `/execute as <player> run hquests debug ...`) |
+| `editing_mode [on\|off] [player]` | editors (`hibiscusquests.editor`) | turns edit mode on or off (with neither, switches it); putting another player in edit mode lets them edit until they log out |
+| `generate_chapter <title>` | editors (`hibiscusquests.editor`) | a new chapter with a quest per item in the container you're looking at |
 
-The permission nodes default to op level 2; a permissions mod can grant them more finely.
+The permission nodes default to op level 2 (`hibiscusquests.editor` to `editor.permissionLevel`); a permissions mod can
+grant them more finely.
 
 ## Configuration
 
@@ -142,6 +174,7 @@ The server's, `config/hibiscusquests-server.toml` (a world's `syncedconfig/` cop
 | `progress.teamChange` | `KEEP_WITH_TEAM` | on changing team: `KEEP_WITH_TEAM`, `COPY_TO_NEW_TEAM` (into a team with no progress) or `MERGE`; `team_change` in `data.snbt` wins |
 | `tasks.itemScanInterval` | 10 | ticks between inventory checks for item tasks |
 | `announcements.chapterCompletion` | false | announce completed chapters in chat |
+| `editor.permissionLevel` | 2 | the op level that may edit the book in game (the `hibiscusquests.editor` node's default) |
 | `rewards.lootCrateDrops` | true | mobs drop reward tables' loot crates (`drop_loot_crates` in `data.snbt` can also turn it off) |
 | `book.maxPinnedQuests` | 5 | how many quests a player can pin |
 | `book.giveBookOnFirstJoin` | false | give each player a Quest Book the first time they join |

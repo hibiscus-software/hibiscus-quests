@@ -11,6 +11,8 @@ import com.mojang.serialization.MapCodec;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
+import java.util.Map;
+import software.hibiscus.hibiscusquests.api.editor.FieldHint;
 
 /**
  * A kind of task: how it's written in chapter files, and how the server tracks it. Register one with
@@ -97,4 +99,15 @@ public interface TaskType<T extends Task> {
      * @param task the task that was active
      */
     default void onDeactivated(ActiveTask<T> task) {}
+
+    /**
+     * How the book's editor edits this type's fields, by field name; fields without a hint get a control picked from
+     * their current value (or a text box for their SNBT). See {@link FieldHint}.
+     *
+     * @return hints by field name; empty by default
+     * @since 0.4.0
+     */
+    default Map<String, FieldHint> editorHints() {
+        return Map.of();
+    }
 }
