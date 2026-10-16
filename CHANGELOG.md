@@ -22,6 +22,13 @@ date. How to cut a release is in [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+### Changed
+
+- **Runs on every NeoForge 26.3 build**, from 26.3.0.0-beta to the newest; it needed 26.3.0.84 or later before. On
+  builds before 26.3.0.37-beta `hibiscusquests-server.toml` lives in the world's `serverconfig/` (those builds have no
+  synced config in `config/`).
+- Needs Hibiscus Lib 1.4.1 or newer, the first to run on those builds too.
+
 ## [1.0.0] - 2026-10-16
 
 The first release. Needs Hibiscus Lib 1.4.0 or newer; Hibiscus Teams is optional.

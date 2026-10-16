@@ -53,9 +53,8 @@ public class HibiscusQuests {
 
     public HibiscusQuests(IEventBus modEventBus, ModContainer modContainer) {
         QuestsApi.install(QuestServiceImpl.INSTANCE);
-        // SYNCED is 26.3's server config: loaded as the server starts (a world's syncedconfig/ copy wins)
-        // and sent to clients.
-        modContainer.registerConfig(ModConfig.Type.SYNCED, QuestsConfig.SPEC, MODID + "-server.toml");
+        // The server config: loaded as the server starts (a world's syncedconfig/ copy wins) and sent to clients.
+        modContainer.registerConfig(syncedConfigType(), QuestsConfig.SPEC, MODID + "-server.toml");
         QuestPermissions.init();
         BuiltinTypes.register(modEventBus);
         QuestSounds.register(modEventBus);
@@ -120,6 +119,17 @@ public class HibiscusQuests {
             ActiveTasks.clear(player);
             ActiveTasks.refresh(player);
         }
+    }
+
+    // FML 12.0.8 (NeoForge 26.3.0.37-beta) renamed SERVER to SYNCED. Looked up by name so the mod runs on every 26.3
+    // build; before the rename the file lives only in the world's serverconfig/.
+    private static ModConfig.Type syncedConfigType() {
+        for (ModConfig.Type type : ModConfig.Type.values()) {
+            if (type.name().equals("SYNCED")) {
+                return type;
+            }
+        }
+        return ModConfig.Type.valueOf("SERVER");
     }
 
     public static Identifier id(String path) {

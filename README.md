@@ -6,7 +6,8 @@ A quest book for NeoForge (Minecraft 26.3) that any mod or modpack can fill: cha
 by dependencies, tasks that track themselves or take items handed in, rewards claimed from the book, progress shared
 by your team, and an in-game editor. Mods ship their quests as data, and packs restyle or replace them.
 
-Needs [Hibiscus Lib](https://github.com/hibiscus-software/hibiscus-lib). With
+Needs Minecraft 26.3, NeoForge 26.3.0.0-beta or later and
+[Hibiscus Lib](https://github.com/hibiscus-software/hibiscus-lib). With
 [Hibiscus Teams](https://github.com/hibiscus-software/hibiscus-teams) installed, a party shares its progress; without
 it, every player has their own.
 

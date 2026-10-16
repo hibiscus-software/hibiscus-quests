@@ -24,6 +24,12 @@ Hibiscus Teams (`hibiscusteams`, optional) progress is per party, without it eve
 - Building against Lib: from GitHub Packages (needs `gpr.user` / `gpr.key` in `~/.gradle/gradle.properties`), or a
   local checkout through the `includeBuild` in `settings.gradle` (`../hibiscus-lib` by default; elsewhere pass
   `-Phibiscuslib_dir=...`, e.g. `-Phibiscuslib_dir=../hibiscuslib-template-26.3`).
+- NeoForge range: the jar declares every 26.3 build from 26.3.0.0-beta (`neo_version_range`) while compiling against
+  `neo_version`. To check an older build, run the already compiled classes on it:
+  `./gradlew runGameTestServer -x compileJava -x compileApiJava -Pneo_version=26.3.0.0-beta --no-configuration-cache`
+  after deleting `build/neoForm` (and `runScreenshotClient -x compileScreenshotsJava` for client changes); without
+  that the Minecraft patched for `neo_version` is reused and the run fails with a `ClassNotFoundException`. Something that differs between builds is looked
+  up by name, as `HibiscusQuests.syncedConfigType` does for `ModConfig.Type.SYNCED` (`SERVER` before 26.3.0.37-beta).
 - Layout: `book/` the book (the file model and its codecs, `BookMerger` merging the pack's files with chapters shipped
   as data, `PackFiles` the pack directory, `DataChapters` the data-pack loader, `BookManager` the server's current book,
   `BookText` quest text and the pack's translations, `PackArchive` export/import, `ChapterExport` export_chapter),

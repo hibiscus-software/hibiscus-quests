@@ -40,6 +40,15 @@ jobs:
       - name: Run game tests
         run: ./gradlew runGameTestServer
 
+      # The classes just compiled, run on the oldest NeoForge in neo_version_range without recompiling, so a call
+      # that newer builds changed shows up as a linkage error. The Minecraft workspace is set up afresh (and the
+      # configuration cache skipped): otherwise the one patched for neo_version is reused, and runs against the old
+      # NeoForge fail with a ClassNotFoundException.
+      - name: Run game tests on the oldest NeoForge
+        run: |
+          rm -rf build/neoForm
+          ./gradlew runGameTestServer -x compileJava -x compileApiJava -Pneo_version=26.3.0.0-beta --no-configuration-cache
+
       # Every build's jars, downloadable from the run's Summary page for 30 days.
       - name: Upload jars
         uses: actions/upload-artifact@v4

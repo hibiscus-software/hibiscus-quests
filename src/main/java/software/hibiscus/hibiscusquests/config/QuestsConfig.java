@@ -13,7 +13,8 @@ import software.hibiscus.hibiscusquests.book.ProgressMode;
 import software.hibiscus.hibiscusquests.book.TeamChange;
 
 // The server's settings, config/hibiscusquests-server.toml (a world's syncedconfig/hibiscusquests-server.toml overrides
-// it). Registered as ModConfig.Type.SYNCED, 26.3's server config, so clients get a copy when they connect. The book's
+// it; serverconfig/ only on NeoForge betas before 26.3.0.37). Registered as the SYNCED type (SERVER before then, see
+// HibiscusQuests.syncedConfigType), so clients get a copy when they connect. The book's
 // data.snbt can override the progress defaults for its own book.
 public final class QuestsConfig {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
