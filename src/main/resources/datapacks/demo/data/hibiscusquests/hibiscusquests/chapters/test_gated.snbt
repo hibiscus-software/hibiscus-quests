@@ -1,0 +1,11 @@
+{
+    id: "test_gated",
+    group: "tests",
+    order: 2,
+    title: "Test: chapter gate",
+    always_invisible: true,
+    requires: ["test_sequential", "test_logic/a"],
+    quests: [
+        {id: "g1", title: "Behind the gate", x: 0.0d, y: 0.0d, tasks: [{type: "checkmark"}]}
+    ]
+}

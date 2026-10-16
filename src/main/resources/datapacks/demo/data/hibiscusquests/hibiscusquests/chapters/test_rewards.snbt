@@ -1,0 +1,44 @@
+{
+    id: "test_rewards",
+    group: "tests",
+    order: 3,
+    title: "Test: rewards",
+    always_invisible: true,
+    quests: [
+        {
+            id: "shared",
+            title: "Per player and per team",
+            x: 0.0d,
+            y: 0.0d,
+            tasks: [{type: "checkmark"}],
+            rewards: [
+                {id: "apple", type: "item", item: "minecraft:apple", count: 2},
+                {id: "stick", type: "item", item: "minecraft:stick", count: 1, team_reward: true},
+                {id: "points", type: "xp", amount: 7},
+                {id: "tag", type: "command", command: "tag {uuid} add hq_reward_ran", silent: true, exclude_from_claim_all: true}
+            ]
+        },
+        {
+            id: "auto",
+            title: "Auto-claimed",
+            x: 2.0d,
+            y: 0.0d,
+            tasks: [{type: "checkmark"}],
+            rewards: [
+                {id: "levels", type: "xp_levels", levels: 2, auto_claim: "enabled"}
+            ]
+        },
+        {
+            id: "again",
+            title: "Repeatable",
+            x: 4.0d,
+            y: 0.0d,
+            repeatable: true,
+            repeat_cooldown: 1L,
+            tasks: [{type: "checkmark"}],
+            rewards: [
+                {id: "points", type: "xp", amount: 1}
+            ]
+        }
+    ]
+}

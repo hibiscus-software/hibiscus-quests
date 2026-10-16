@@ -5,16 +5,24 @@ issueTrackerURL="https://github.com/hibiscus-software/hibiscus-quests/issues"
 modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
-displayURL="https://github.com/hibiscus-software/hibiscus-quests"
 authors="Hibiscus Software"
+displayURL="https://github.com/hibiscus-software/hibiscus-quests"
+# The mod list's square icon (left) and banner (right), at the jar root. Pixel art, so no blur when scaled.
+iconFile="hibiscusquests_icon.png"
+bannerFile="hibiscusquests_banner.png"
+iconBlur=false
 description='''
-A quest system for Minecraft.
+A quest book for any mod or modpack: chapters of quests on a map, tasks that track themselves, rewards claimed from the book, progress shared by your team, and an in-game editor. Mods ship their quests as data.
 '''
+
+# Criterion tasks listen to advancement triggers without touching the player's advancements (see PlayerAdvancementsMixin).
+[[mixins]]
+config="${mod_id}.mixins.json"
 
 [[dependencies.${mod_id}]]
     modId="neoforge"
     type="required"
-    versionRange="[${neo_version},)"
+    versionRange="${neo_version_range}"
     ordering="NONE"
     side="BOTH"
 
@@ -22,5 +30,21 @@ A quest system for Minecraft.
     modId="minecraft"
     type="required"
     versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+# AFTER: Hibiscus Lib constructs first, so its Teams API fallback and button bar are ready when Quests uses them.
+[[dependencies.${mod_id}]]
+    modId="hibiscuslib"
+    type="required"
+    versionRange="[1.2.1,)"
+    ordering="AFTER"
+    side="BOTH"
+
+# Optional: with Hibiscus Teams, progress is shared by each party (through the Hibiscus Lib Teams API, never its classes).
+[[dependencies.${mod_id}]]
+    modId="hibiscusteams"
+    type="optional"
+    versionRange="[1.0.0,)"
     ordering="NONE"
     side="BOTH"

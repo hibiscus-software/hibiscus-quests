@@ -1,0 +1,17 @@
+{
+    groups: [
+        {
+            id: "demo",
+            title: "Demo",
+            icon: "minecraft:book",
+            order: 0
+        },
+        {
+            id: "tests",
+            title: "Gametests",
+            icon: "minecraft:command_block",
+            order: 100,
+            collapsed: true
+        }
+    ]
+}

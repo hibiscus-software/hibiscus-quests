@@ -1,0 +1,65 @@
+{
+    id: "demo_other",
+    group: "demo",
+    order: 1,
+    title: "Checkmarks, Advancements and Triggers",
+    icon: "minecraft:writable_book",
+    quests: [
+        {
+            id: "read_me",
+            title: "Read Me",
+            description: [
+                "A **checkmark** task is ticked in the book: for steps that only need reading.",
+                "See {quest:demo_other/stone} next."
+            ],
+            shape: "square",
+            x: 0.0d,
+            y: 0.0d,
+            tasks: [
+                {id: "ack", type: "checkmark"}
+            ],
+            rewards: [
+                {id: "bread", type: "item", item: "minecraft:bread", count: 4, auto_claim: "enabled"}
+            ]
+        },
+        {
+            id: "stone",
+            title: "Stone Age",
+            description: ["An **advancement** task completes when you have the advancement (or one criterion of it)."],
+            x: 2.0d,
+            y: 0.0d,
+            dependencies: ["read_me"],
+            tasks: [
+                {id: "stone", type: "advancement", advancement: "minecraft:story/mine_stone"}
+            ],
+            rewards: [
+                {id: "points", type: "xp", amount: 20}
+            ]
+        },
+        {
+            id: "apples",
+            title: "An Apple a Day",
+            description: [
+                "A **criterion** task listens to any advancement trigger, vanilla or modded, written like an advancement's criterion.",
+                "Here: eat two apples. Nothing is added to your advancements."
+            ],
+            x: 4.0d,
+            y: 0.0d,
+            dependencies: ["stone"],
+            tasks: [
+                {
+                    id: "eat",
+                    type: "criterion",
+                    title: "Eat 2 apples",
+                    icon: "minecraft:apple",
+                    count: 2L,
+                    criterion: {trigger: "minecraft:consume_item", conditions: {item: {items: "minecraft:apple"}}}
+                }
+            ],
+            rewards: [
+                {id: "golden", type: "item", item: "minecraft:golden_apple", count: 1},
+                {id: "speed", type: "command", command: "effect give {p} minecraft:speed 30", title: "30 seconds of Speed", silent: true}
+            ]
+        }
+    ]
+}

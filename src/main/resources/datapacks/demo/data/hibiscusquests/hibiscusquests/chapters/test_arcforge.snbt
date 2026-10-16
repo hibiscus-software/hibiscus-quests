@@ -1,0 +1,40 @@
+{
+    id: "test_arcforge",
+    group: "tests",
+    order: 10,
+    title: "Test: Arcforge triggers",
+    always_invisible: true,
+    requires_mods: ["arcforge"],
+    quests: [
+        {
+            id: "formed",
+            x: 0.0d,
+            y: 0.0d,
+            tasks: [{id: "t", type: "criterion", criterion: {trigger: "arcforge:multiblock_formed", conditions: {multiblock: "arcforge:arcforge_furnace"}}}]
+        },
+        {
+            id: "produced",
+            x: 1.0d,
+            y: 0.0d,
+            tasks: [{id: "t", type: "criterion", criterion: {trigger: "arcforge:machine_produced", conditions: {item: {items: "minecraft:iron_ingot"}}}}]
+        },
+        {
+            id: "turbine",
+            x: 2.0d,
+            y: 0.0d,
+            tasks: [{id: "t", type: "criterion", criterion: {trigger: "arcforge:turbine_full_speed", conditions: {multiblock: "arcforge:steam_turbine", min_length: 3}}}]
+        },
+        {
+            id: "oxy",
+            x: 3.0d,
+            y: 0.0d,
+            tasks: [{id: "t", type: "criterion", criterion: {trigger: "arcforge:oxy_fuel", conditions: {min_temperature: 1000}}}]
+        },
+        {
+            id: "linked",
+            x: 4.0d,
+            y: 0.0d,
+            tasks: [{id: "t", type: "criterion", criterion: {trigger: "arcforge:machine_linked", conditions: {multiblock: true}}}]
+        }
+    ]
+}

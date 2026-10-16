@@ -1,0 +1,13 @@
+{
+    id: "test_sequential",
+    group: "tests",
+    order: 1,
+    title: "Test: require_sequential",
+    always_invisible: true,
+    require_sequential: true,
+    quests: [
+        {id: "s1", title: "First", x: 0.0d, y: 0.0d, tasks: [{type: "checkmark"}]},
+        {id: "s2", title: "Second", x: 1.0d, y: 0.0d, tasks: [{type: "checkmark"}]},
+        {id: "s3", title: "Third", x: 2.0d, y: 0.0d, tasks: [{type: "checkmark"}]}
+    ]
+}

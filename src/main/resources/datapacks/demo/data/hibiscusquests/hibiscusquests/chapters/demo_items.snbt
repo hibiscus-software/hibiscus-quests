@@ -1,0 +1,57 @@
+{
+    id: "demo_items",
+    group: "demo",
+    order: 0,
+    title: "Items",
+    subtitle: "Hold them, or hand them in",
+    icon: "minecraft:iron_ingot",
+    quests: [
+        {
+            id: "iron",
+            title: "Iron Age",
+            description: [
+                "# Holding is enough",
+                "An **item** task in *detect* mode completes as soon as you carry the items.",
+                "---",
+                "Detected items count even while a quest is locked."
+            ],
+            x: 0.0d,
+            y: 0.0d,
+            tasks: [
+                {id: "iron", type: "item", item: "minecraft:iron_ingot", count: 4L}
+            ],
+            rewards: [
+                {id: "diamond", type: "item", item: "minecraft:diamond", count: 1},
+                {id: "levels", type: "xp_levels", levels: 1}
+            ]
+        },
+        {
+            id: "gold",
+            title: "Hand It Over",
+            description: ["In *consume* mode, the **Submit** button takes the items from you."],
+            x: 2.0d,
+            y: 0.0d,
+            dependencies: ["iron"],
+            tasks: [
+                {id: "gold", type: "item", item: "minecraft:gold_ingot", count: 2L, mode: "consume"}
+            ],
+            rewards: [
+                {id: "emeralds", type: "item", item: "minecraft:emerald", count: 3, team_reward: true}
+            ]
+        },
+        {
+            id: "planks",
+            title: "Woodwork",
+            description: ["only_from_crafting counts items as you craft them."],
+            x: 2.0d,
+            y: 1.5d,
+            dependencies: ["iron"],
+            tasks: [
+                {id: "planks", type: "item", tag: "minecraft:planks", count: 16L, only_from_crafting: true}
+            ],
+            rewards: [
+                {id: "points", type: "xp", amount: 50}
+            ]
+        }
+    ]
+}

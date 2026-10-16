@@ -1,0 +1,34 @@
+{
+    id: "test_logic",
+    group: "tests",
+    title: "Test: dependencies and locks",
+    always_invisible: true,
+    quests: [
+        {id: "a", title: "A", x: 0.0d, y: 0.0d, tasks: [{type: "checkmark"}]},
+        {id: "b", title: "B", x: 0.0d, y: 1.0d, tasks: [{type: "checkmark"}]},
+        {id: "c", title: "C", x: 0.0d, y: 2.0d, tasks: [{type: "checkmark"}]},
+        {id: "needs_all", title: "All of A, B", x: 2.0d, y: 0.0d, dependencies: ["a", "b"]},
+        {id: "needs_any", title: "Any of A, B", x: 2.0d, y: 1.0d, dependencies: ["a", "b"], dependency_mode: "any"},
+        {id: "needs_two", title: "Two of A, B, C", x: 2.0d, y: 2.0d, dependencies: ["a", "b", "c"], dependency_mode: "min", min_required: 2},
+        {id: "left", title: "Left branch", x: 4.0d, y: 0.0d, dependencies: ["a"], dependency_mode: "one_of", tasks: [{type: "checkmark"}]},
+        {id: "right", title: "Right branch", x: 4.0d, y: 1.0d, dependencies: ["a"], dependency_mode: "one_of", tasks: [{type: "checkmark"}]},
+        {id: "gate", title: "Locked first", x: 6.0d, y: 0.0d, tasks: [{type: "checkmark"}]},
+        {
+            id: "held",
+            title: "Counts while locked",
+            x: 8.0d,
+            y: 0.0d,
+            dependencies: ["gate"],
+            tasks: [{id: "stick", type: "item", item: "minecraft:stick", count: 1L}]
+        },
+        {
+            id: "linear",
+            title: "One task at a time",
+            x: 6.0d,
+            y: 2.0d,
+            progression_mode: "linear",
+            tasks: [{id: "first", type: "checkmark"}, {id: "second", type: "checkmark"}]
+        },
+        {id: "ghost", title: "Points nowhere", x: 8.0d, y: 2.0d, dependencies: ["no_such_quest"], tasks: [{type: "checkmark"}]}
+    ]
+}
