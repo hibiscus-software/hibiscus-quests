@@ -6,7 +6,9 @@
 
 package software.hibiscus.hibiscusquests.network;
 
+import software.hibiscus.hibiscusquests.api.QuestRef;
 import software.hibiscus.hibiscusquests.client.ClientQuestState;
+import software.hibiscus.hibiscusquests.client.screen.QuestBookScreen;
 
 // The step from a payload handler to client code. The handlers are registered on both sides but only ever run on a
 // client, and ClientQuestState is only loaded when one of these is called, so a dedicated server never loads it.
@@ -23,5 +25,9 @@ final class ClientBridge {
 
     static void progress(QuestPayloads.Progress payload) {
         ClientQuestState.onProgress(payload);
+    }
+
+    static void openBook(QuestPayloads.OpenBook payload) {
+        QuestBookScreen.open(QuestRef.parse(payload.quest()).orElse(null));
     }
 }

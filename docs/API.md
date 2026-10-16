@@ -164,7 +164,8 @@ Titles, subtitles and descriptions may be plain text (with `&` formatting codes)
 shown as written when there's no translation), or `{translate:mymod.quest.wrench}`. Ship the translations in your
 mod's `assets/<your mod id>/lang/` files to have your quests translated. Descriptions also take `# headings`,
 `- bullets`, `**bold**`, `*italic*`, `[links](https://...)`, `{item:id}`, `{quest:chapter/quest}` and
-`{image:path width height}`.
+`{image:<texture> <width> <height>}` on a line of its own (a texture path such as
+`mymod:textures/gui/map.png`).
 
 ### Criterion tasks: your mod's own triggers
 
@@ -281,6 +282,9 @@ Posted on `NeoForge.EVENT_BUS` on the server thread:
 | `RewardClaimedEvent.Pre` | a reward is about to be handed out; cancel it to stop the claim |
 | `RewardClaimedEvent.Post` | a reward was handed out and recorded |
 | `BookReloadedEvent` | the book was (re)built: server start, `/reload`, `/hibiscusquests reload`, edits |
+
+And on the client: `QuestBookOpenEvent`, as the book is about to open (cancel it to keep it shut), with the quest it
+opens on, if any.
 
 ## The book (for packs)
 

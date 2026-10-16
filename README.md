@@ -10,8 +10,35 @@ Needs [Hibiscus Lib](https://github.com/hibiscus-software/hibiscus-lib). With
 [Hibiscus Teams](https://github.com/hibiscus-software/hibiscus-teams) installed, a party shares its progress; without
 it, every player has their own.
 
-> **In development.** The book's engine works (the files, every rule below, the first task and reward types, saving,
-> syncing and the admin commands); the book's screens, the editor and the remaining task and reward types are next.
+![A chapter of the quest book](docs/images/book.png)
+
+> **In development.** The book works end to end (the files, the rules, the screens, saving and syncing); the in-game
+> editor, more task and reward types, reward tables and the pinned-quests HUD are next.
+
+## The book
+
+Open it from the button by the inventory (its badge counts the rewards waiting for you), the "Open Quest Book" key
+(unbound until you set it), or `/hibiscusquests open`. Chapters are down the left, in groups; each shows how far you are
+and a gold dot where rewards wait. The map shows the chapter's quests joined by what they need: drag to pan, scroll to
+zoom. A quest's node shows where you stand with it: locked, open, in progress (the ring), done with rewards waiting
+(pulsing gold) or done.
+
+<p><img src="docs/images/inventory-button.png" width="280" alt="The book's button beside the inventory, with a badge">
+<img src="docs/images/book-collapsed.png" width="520" alt="The chapter list collapsed to icons"></p>
+
+Click a quest to open it: its description, its tasks (with Submit for items you hand in, and a tick box for steps you
+only need to read), and its rewards, each with its own Claim button (or **Claim all** in the top bar). Items open their
+recipes in JEI. Rewards are yours alone, or shared once by the team.
+
+<p><img src="docs/images/quest.png" width="380" alt="A quest's description, task and claimed reward">
+<img src="docs/images/quest-rewards.png" width="380" alt="A completed quest with rewards to claim"></p>
+<p><img src="docs/images/quest-tasks.png" width="380" alt="A quest in progress, with a Submit button">
+<img src="docs/images/search.png" width="380" alt="Searching the book"></p>
+
+Search (Ctrl+F) finds quests by title, description or task. Tab and the arrow keys change chapter; Esc closes the quest,
+then the book. A toast tells you when you finish a quest or chapter.
+
+![A quest complete toast](docs/images/toast.png)
 
 ## For modpack authors
 
@@ -71,6 +98,7 @@ Ship your quests in your jar under `data/<your mod id>/hibiscusquests/`, with no
 
 | Command | Who | |
 |---|---|---|
+| `open [quest]` | everyone | opens the book, on a quest (`chapter/quest`) if given |
 | `claim_all` | everyone | claims every reward you can, except those left out of Claim all |
 | `reload` | ops (`hibiscusquests.admin.reload`) | reads the pack's files again |
 | `change_progress <player\|team> <reset\|complete> <quest\|chapter\|*>` | ops (`hibiscusquests.admin.change_progress`) | a quest is `chapter/quest`; players may be offline; a team is its short name or id |
@@ -80,7 +108,17 @@ The permission nodes default to op level 2; a permissions mod can grant them mor
 
 ## Configuration
 
-`config/hibiscusquests-server.toml` (a world's `syncedconfig/` copy wins):
+Each player's own, `config/hibiscusquests-client.toml` (also under Mods > Hibiscus Quests > Config):
+
+| Setting | Default | |
+|---|---|---|
+| `notifications.toasts` | true | toasts for completed quests and chapters, and rewards that arrive by themselves |
+| `notifications.sounds` | true | sounds for the same, and for claims |
+| `book.zoomSensitivity` | 1.0 | how far one step of the mouse wheel zooms |
+| `book.reducedMotion` | false | no pulsing nodes or moving dashes |
+| `book.chapterListCollapsed` | false | start with the chapter list as icons |
+
+The server's, `config/hibiscusquests-server.toml` (a world's `syncedconfig/` copy wins):
 
 | Setting | Default | |
 |---|---|---|

@@ -38,6 +38,7 @@ import software.hibiscus.hibiscusquests.book.ProgressMode;
 import software.hibiscus.hibiscusquests.book.Quest;
 import software.hibiscus.hibiscusquests.book.QuestBook;
 import software.hibiscus.hibiscusquests.book.QuestTask;
+import software.hibiscus.hibiscusquests.network.QuestSync;
 import software.hibiscus.hibiscusquests.progress.ProgressManager;
 import software.hibiscus.hibiscusquests.progress.QuestClock;
 import software.hibiscus.hibiscusquests.progress.QuestLogic;
@@ -45,9 +46,9 @@ import software.hibiscus.hibiscusquests.progress.QuestTeams;
 import software.hibiscus.hibiscusquests.progress.TeamProgress;
 import software.hibiscus.hibiscusquests.task.CriterionTask;
 
-// /hibiscusquests (alias /hquests). Players: claim_all. Ops (hibiscusquests.admin.* nodes): reload, change_progress
-// and debug. Player and team arguments take online or offline players by name (through Hibiscus Lib's Profiles), a
-// team's short name, or a team id.
+// /hibiscusquests (alias /hquests). Players: open [quest] and claim_all. Ops (hibiscusquests.admin.* nodes): reload,
+// change_progress and debug. Player and team arguments take online or offline players by name (through Hibiscus
+// Lib's Profiles), a team's short name, or a team id.
 public final class QuestsCommand {
     private static final SuggestionProvider<CommandSourceStack> QUESTS = (context, builder) -> {
         List<String> options = new ArrayList<>();
@@ -84,6 +85,10 @@ public final class QuestsCommand {
 
     private static LiteralArgumentBuilder<CommandSourceStack> build(String root) {
         return Commands.literal(root)
+                .then(Commands.literal("open")
+                        .executes(context -> open(context, ""))
+                        .then(Commands.argument("quest", StringArgumentType.greedyString()).suggests(QUESTS)
+                                .executes(context -> open(context, StringArgumentType.getString(context, "quest").strip()))))
                 .then(Commands.literal("claim_all")
                         .executes(QuestsCommand::claimAll))
                 .then(Commands.literal("reload")
@@ -102,6 +107,11 @@ public final class QuestsCommand {
                         .requires(PermissionLevels.requires(QuestPermissions.DEBUG, PermissionLevel.GAMEMASTERS))
                         .then(Commands.argument("quest", StringArgumentType.greedyString()).suggests(QUESTS)
                                 .executes(QuestsCommand::debug)));
+    }
+
+    private static int open(CommandContext<CommandSourceStack> context, String quest) throws CommandSyntaxException {
+        QuestSync.openBook(context.getSource().getPlayerOrException(), quest);
+        return 1;
     }
 
     private static int claimAll(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {

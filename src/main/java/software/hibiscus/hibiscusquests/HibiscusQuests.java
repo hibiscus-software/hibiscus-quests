@@ -55,6 +55,7 @@ public class HibiscusQuests {
         modContainer.registerConfig(ModConfig.Type.SYNCED, QuestsConfig.SPEC, MODID + "-server.toml");
         QuestPermissions.init();
         BuiltinTypes.register(modEventBus);
+        QuestSounds.register(modEventBus);
         QuestNetwork.register(modEventBus);
         QuestPacks.register(modEventBus);
         HibiscusQuestsGameTests.register(modEventBus);

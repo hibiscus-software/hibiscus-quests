@@ -22,7 +22,7 @@ date. How to cut a release is in [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
-Suggested version: 1.0.0 (the first release).
+Suggested version: 1.0.0 (the first release). Needs Hibiscus Lib 1.3.0 (its new text markup).
 
 ### Added
 
@@ -60,6 +60,23 @@ Suggested version: 1.0.0 (the first release).
   `progress`, `chapterProgress`, `book`), progress pushes (`addProgress`, `complete`), and the events
   `QuestCompletedEvent`, `ChapterCompletedEvent`, `TaskProgressEvent`, `RewardClaimedEvent.Pre`/`Post` and
   `BookReloadedEvent`.
-- **A demo book** as a built-in data pack, off unless switched on with `/datapack enable`: one chapter per task type.
+- **A demo book** as a built-in data pack, off unless switched on with `/datapack enable`: a tour of every shape and
+  state, and a chapter per task type.
+- **The quest book screen**, from a button by the inventory (with a gold count of rewards waiting), an unbound "Open
+  Quest Book" key, or `/hibiscusquests open [quest]`. It fills the window: the chapter list on the left (groups that
+  fold, a progress bar per chapter, a gold dot where rewards wait, a lock on chapters still gated; collapsible to
+  icons), a top bar with the chapter's title and progress, search, Claim all and your team (opening Hibiscus Teams'
+  screen when it's installed), and the chapter's map: quests as nodes in nine shapes, joined by dependency lines,
+  with the chapter's images, labels and links to other chapters' quests. Drag to pan, scroll to zoom (0.5x to 3x);
+  each chapter remembers its view. Nodes show whether a quest is locked, open, in progress (a ring), complete with
+  rewards waiting (pulsing gold) or done (a check); secret quests show "?". Lines into open quests have moving dashes.
+- **The quest view**, over the map: description pages (with headings, bold and italic, inline item icons, pictures and
+  links to other quests), tasks with progress bars, Submit buttons and checkboxes, rewards with a Claim button each
+  (and who on the team claimed a team reward), and the quests still needed. Item icons open JEI's recipes and uses.
+- **Toasts and sounds** for completed quests and chapters and for rewards that arrive by themselves, and a sound for
+  claims. Keyboard: Esc closes the view then the book, Tab and the arrow keys change chapter, Ctrl+F searches.
+- **Client settings**, `hibiscusquests-client.toml`: toasts, sounds, the zoom step, reduced motion (no pulsing or
+  moving dashes) and whether the chapter list starts collapsed.
+- **API 0.2.0**: `QuestBookOpenEvent` (client, cancellable).
 
 [Unreleased]: https://github.com/hibiscus-software/hibiscus-quests/commits/HEAD

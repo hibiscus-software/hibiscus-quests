@@ -143,12 +143,29 @@ public record ItemTask(Optional<ItemStack> item, Optional<TagKey<Item>> tag, Opt
             name = item.get().getHoverName();
         } else if (tag.isPresent()) {
             Identifier id = tag.get().location();
-            name = Component.translatableWithFallback("tag.item." + id.getNamespace() + "." + id.getPath().replace('/', '.'), "#" + id);
+            name = Component.translatableWithFallback("tag.item." + id.getNamespace() + "." + id.getPath().replace('/', '.'), humanize(id.getPath()));
         } else {
             name = icon().isEmpty() ? Component.translatable("hibiscusquests.task.item.any") : icon().getHoverName();
         }
         String key = onlyFromCrafting ? "hibiscusquests.task.item.craft" : mode == Mode.CONSUME ? "hibiscusquests.task.item.submit" : "hibiscusquests.task.item";
         return Component.translatable(key, count, name);
+    }
+
+    // A tag's path as words, for tags without a translation: "logs" is "Logs", "ingots/steel" is "Steel Ingots".
+    static String humanize(String path) {
+        String[] parts = path.split("/");
+        StringBuilder out = new StringBuilder();
+        for (int i = parts.length - 1; i >= 0; i--) {
+            for (String word : parts[i].split("_")) {
+                if (!word.isEmpty()) {
+                    if (!out.isEmpty()) {
+                        out.append(' ');
+                    }
+                    out.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+                }
+            }
+        }
+        return out.toString();
     }
 
     // How many matching items the player holds (main inventory, armour and off hand).

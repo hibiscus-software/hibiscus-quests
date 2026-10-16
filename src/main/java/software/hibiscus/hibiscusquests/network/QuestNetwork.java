@@ -23,7 +23,7 @@ import software.hibiscus.hibiscusquests.progress.ProgressManager;
 // complete or the task active for the sender's own team.
 public final class QuestNetwork {
     // Bumped whenever a payload changes; clients and servers must match.
-    public static final String VERSION = "1";
+    public static final String VERSION = "2";
 
     private static final RateLimiter BOOK_REQUESTS = new RateLimiter(3, 0.2);
     private static final RateLimiter CLAIMS = new RateLimiter(20, 10);
@@ -36,6 +36,7 @@ public final class QuestNetwork {
                 .toClient(QuestPayloads.BookHash.TYPE, QuestPayloads.BookHash.STREAM_CODEC, (payload, context) -> ClientBridge.bookHash(payload))
                 .toClient(QuestPayloads.BookChunk.TYPE, QuestPayloads.BookChunk.STREAM_CODEC, (payload, context) -> ClientBridge.bookChunk(payload))
                 .toClient(QuestPayloads.Progress.TYPE, QuestPayloads.Progress.STREAM_CODEC, (payload, context) -> ClientBridge.progress(payload))
+                .toClient(QuestPayloads.OpenBook.TYPE, QuestPayloads.OpenBook.STREAM_CODEC, (payload, context) -> ClientBridge.openBook(payload))
                 .toServer(QuestPayloads.BookRequest.TYPE, QuestPayloads.BookRequest.STREAM_CODEC, QuestNetwork::bookRequest)
                 .toServer(QuestPayloads.Claim.TYPE, QuestPayloads.Claim.STREAM_CODEC, QuestNetwork::claim)
                 .toServer(QuestPayloads.ClaimAll.TYPE, QuestPayloads.ClaimAll.STREAM_CODEC, QuestNetwork::claimAll)

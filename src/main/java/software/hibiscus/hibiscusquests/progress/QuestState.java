@@ -32,6 +32,8 @@ public final class QuestState {
     int repeats;
     long cooldownUntil;
     final Set<String> teamClaims = new TreeSet<>();
+    // Who claimed each team reward, for "claimed by" in the book.
+    final Map<String, UUID> teamClaimers = new TreeMap<>();
     final Map<UUID, Set<String>> playerClaims = new TreeMap<>();
 
     public long task(String taskId) {
@@ -75,6 +77,10 @@ public final class QuestState {
         return Collections.unmodifiableSet(teamClaims);
     }
 
+    public Optional<UUID> teamClaimer(String rewardId) {
+        return Optional.ofNullable(teamClaimers.get(rewardId));
+    }
+
     public Set<String> claimsOf(UUID player) {
         return Collections.unmodifiableSet(playerClaims.getOrDefault(player, Set.of()));
     }
@@ -82,6 +88,7 @@ public final class QuestState {
     void claim(String rewardId, boolean teamReward, UUID player) {
         if (teamReward) {
             teamClaims.add(rewardId);
+            teamClaimers.put(rewardId, player);
         } else {
             playerClaims.computeIfAbsent(player, key -> new TreeSet<>()).add(rewardId);
         }
@@ -95,6 +102,7 @@ public final class QuestState {
         completedBy = null;
         cooldownUntil = 0;
         teamClaims.clear();
+        teamClaimers.clear();
         playerClaims.clear();
     }
 
@@ -114,6 +122,7 @@ public final class QuestState {
         repeats = Math.max(repeats, other.repeats);
         cooldownUntil = Math.max(cooldownUntil, other.cooldownUntil);
         teamClaims.addAll(other.teamClaims);
+        other.teamClaimers.forEach(teamClaimers::putIfAbsent);
         other.playerClaims.forEach((player, claims) -> playerClaims.computeIfAbsent(player, key -> new TreeSet<>()).addAll(claims));
     }
 
@@ -140,6 +149,11 @@ public final class QuestState {
         if (!teamClaims.isEmpty()) {
             tag.put("claimed_team", strings(teamClaims));
         }
+        if (!teamClaimers.isEmpty()) {
+            CompoundTag by = new CompoundTag();
+            teamClaimers.forEach((reward, player) -> by.putString(reward, player.toString()));
+            tag.put("claimed_team_by", by);
+        }
         CompoundTag claims = new CompoundTag();
         playerClaims.forEach((player, ids) -> {
             if (!ids.isEmpty()) {
@@ -164,6 +178,10 @@ public final class QuestState {
         state.repeats = tag.getIntOr("repeats", 0);
         state.cooldownUntil = tag.getLongOr("cooldown_until", 0);
         readStrings(tag.getListOrEmpty("claimed_team"), state.teamClaims);
+        CompoundTag by = tag.getCompoundOrEmpty("claimed_team_by");
+        for (String reward : by.keySet()) {
+            by.getString(reward).flatMap(QuestState::uuid).ifPresent(player -> state.teamClaimers.put(reward, player));
+        }
         CompoundTag claims = tag.getCompoundOrEmpty("claimed");
         for (String key : claims.keySet()) {
             uuid(key).ifPresent(player -> readStrings(claims.getListOrEmpty(key),

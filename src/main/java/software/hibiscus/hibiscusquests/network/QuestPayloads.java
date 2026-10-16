@@ -75,6 +75,17 @@ public final class QuestPayloads {
         }
     }
 
+    // Open the book, on a quest ("chapter/quest") or where the player left it ("").
+    public record OpenBook(String quest) implements CustomPacketPayload {
+        public static final Type<OpenBook> TYPE = payloadType("open_book");
+        public static final StreamCodec<ByteBuf, OpenBook> STREAM_CODEC = ByteBufCodecs.STRING_UTF8.map(OpenBook::new, OpenBook::quest);
+
+        @Override
+        public Type<OpenBook> type() {
+            return TYPE;
+        }
+    }
+
     // ---- Client to server ----
 
     // "Send me the book with this hash" (the server only answers for its current book).

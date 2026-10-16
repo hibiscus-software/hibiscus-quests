@@ -148,6 +148,11 @@ public final class QuestSync {
         FULL.clear();
     }
 
+    // Opens the player's book (the open command).
+    public static void openBook(ServerPlayer player, String quest) {
+        send(player, new QuestPayloads.OpenBook(quest));
+    }
+
     private static void send(ServerPlayer player, CustomPacketPayload payload) {
         if (player.connection != null && player.connection.hasChannel(payload.type())) {
             HibiscusNetwork.sendToPlayer(player, payload);

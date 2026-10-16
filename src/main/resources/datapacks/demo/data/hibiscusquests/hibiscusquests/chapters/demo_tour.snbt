@@ -1,0 +1,158 @@
+{
+    id: "demo_tour",
+    group: "demo",
+    order: -1,
+    title: "A Tour of the Book",
+    subtitle: "Every shape, state and line in one chapter",
+    icon: "minecraft:compass",
+    quests: [
+        {
+            id: "start",
+            title: "Welcome",
+            subtitle: "Tick this to begin",
+            description: [
+                "# Welcome to the tour",
+                "Each node is a quest. Lines run from what a quest *needs* to the quest itself.",
+                "- **Grey** lines: not done yet",
+                "- Coloured lines: done, and moving dashes lead into quests you can start now",
+                "---",
+                "## Opening quests",
+                "Click a node to open it. Items like {item:minecraft:oak_log} open their recipes; {quest:demo_tour/goal} links jump to another quest."
+            ],
+            shape: "circle",
+            size: 1.5d,
+            x: 0.0d,
+            y: 0.0d,
+            tasks: [{id: "ack", type: "checkmark"}],
+            rewards: [{id: "bread", type: "item", item: "minecraft:bread", count: 4}]
+        },
+        {
+            id: "logs",
+            title: "Timber",
+            subtitle: "Hold some logs",
+            shape: "square",
+            x: 2.5d,
+            y: -1.0d,
+            dependencies: ["start"],
+            tasks: [{id: "logs", type: "item", tag: "minecraft:logs", count: 8L}],
+            rewards: [
+                {id: "apples", type: "item", item: "minecraft:apple", count: 3},
+                {id: "levels", type: "xp_levels", levels: 1},
+                {id: "saplings", type: "item", item: "minecraft:oak_sapling", count: 4, team_reward: true}
+            ]
+        },
+        {
+            id: "tools",
+            title: "Sticks and Stones",
+            shape: "rsquare",
+            x: 2.5d,
+            y: 1.0d,
+            dependencies: ["start"],
+            tasks: [
+                {id: "sticks", type: "item", item: "minecraft:stick", count: 16L},
+                {id: "cobble", type: "item", item: "minecraft:cobblestone", count: 32L, mode: "consume"}
+            ],
+            rewards: [{id: "pick", type: "item", item: "minecraft:stone_pickaxe"}]
+        },
+        {
+            id: "furnace",
+            title: "Fire",
+            shape: "diamond",
+            x: 4.5d,
+            y: -1.0d,
+            dependencies: ["logs"],
+            tasks: [{id: "furnace", type: "item", item: "minecraft:furnace"}],
+            rewards: [{id: "coal", type: "item", item: "minecraft:coal", count: 8}]
+        },
+        {
+            id: "iron",
+            title: "Iron",
+            shape: "pentagon",
+            x: 6.5d,
+            y: -1.0d,
+            dependencies: ["furnace"],
+            tasks: [{id: "iron", type: "item", item: "minecraft:iron_ingot", count: 8L}],
+            rewards: [{id: "bucket", type: "item", item: "minecraft:bucket"}]
+        },
+        {
+            id: "deep",
+            title: "Going Deeper",
+            shape: "hexagon",
+            x: 8.5d,
+            y: -1.0d,
+            dependencies: ["iron"],
+            tasks: [{id: "diamond", type: "item", item: "minecraft:diamond", count: 3L}],
+            rewards: [{id: "levels", type: "xp_levels", levels: 5}]
+        },
+        {
+            id: "farm",
+            title: "Farmer",
+            subtitle: "One branch...",
+            shape: "octagon",
+            x: 4.5d,
+            y: 1.0d,
+            dependencies: ["tools"],
+            dependency_mode: "one_of",
+            tasks: [{id: "wheat", type: "item", item: "minecraft:wheat", count: 16L}],
+            rewards: [{id: "bread", type: "item", item: "minecraft:bread", count: 8}]
+        },
+        {
+            id: "hunt",
+            title: "Hunter",
+            subtitle: "...or the other",
+            shape: "octagon",
+            x: 4.5d,
+            y: 2.5d,
+            dependencies: ["tools"],
+            dependency_mode: "one_of",
+            tasks: [{id: "beef", type: "item", item: "minecraft:cooked_beef", count: 8L}],
+            rewards: [{id: "leather", type: "item", item: "minecraft:leather", count: 6}]
+        },
+        {
+            id: "friend",
+            title: "A Friend",
+            subtitle: "Optional",
+            shape: "heart",
+            optional: true,
+            x: 0.0d,
+            y: 2.5d,
+            dependencies: ["start"],
+            tasks: [{id: "bone", type: "item", item: "minecraft:bone", count: 1L}],
+            rewards: [{id: "levels", type: "xp_levels", levels: 1}]
+        },
+        {
+            id: "secret",
+            title: "The Hidden Vault",
+            secret: true,
+            x: 8.5d,
+            y: 1.5d,
+            dependencies: ["deep"],
+            tasks: [{id: "star", type: "item", item: "minecraft:nether_star"}]
+        },
+        {
+            id: "goal",
+            title: "Self-Sufficient",
+            subtitle: "The chapter's goal",
+            shape: "gear",
+            size: 2.0d,
+            x: 11.0d,
+            y: 0.25d,
+            dependencies: ["deep", "farm", "hunt"],
+            dependency_mode: "min",
+            min_required: 2,
+            tasks: [{id: "ack", type: "checkmark"}],
+            rewards: [{id: "diamonds", type: "item", item: "minecraft:diamond", count: 4, team_reward: true}]
+        }
+    ],
+    quest_links: [
+        {id: "link_iron", quest: "demo_items/iron", x: 7.0d, y: 2.75d}
+    ],
+    images: [
+        {image: "minecraft:filled_map", x: -2.0d, y: 1.25d, width: 1.2d, height: 1.2d}
+    ],
+    labels: [
+        {text: "Getting started", x: 0.0d, y: -1.6d, scale: 1.0d, color: "#9a9da3"},
+        {text: "Pick a path", x: 4.5d, y: 3.3d, scale: 0.75d, color: "#9a9da3"},
+        {text: "From another chapter", x: 7.0d, y: 3.55d, scale: 0.75d, color: "#9a9da3"}
+    ]
+}

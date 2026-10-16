@@ -15,6 +15,8 @@ import static software.hibiscus.hibiscusquests.gametest.TestSupport.ref;
 import static software.hibiscus.hibiscusquests.gametest.TestSupport.team;
 import static software.hibiscus.hibiscusquests.gametest.TestSupport.tick;
 
+import java.util.Optional;
+
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Items;
@@ -53,6 +55,8 @@ final class RewardGameTests {
             check(helper, ProgressManager.claim(second, ref(CHAPTER, "shared"), "stick") == ClaimResult.ALREADY_CLAIMED,
                     "the team reward can't be claimed twice");
             check(helper, second.getInventory().countItem(Items.STICK) == 0, "so the second gets no stick");
+            check(helper, progress(second).state(ref(CHAPTER, "shared")).teamClaimer("stick").equals(Optional.of(first.getUUID())),
+                    "the book can say who on the team claimed it");
             int levelsBefore = second.totalExperience;
             check(helper, ProgressManager.claimAll(second) == 1, "Claim all takes the XP but leaves the excluded command reward");
             check(helper, second.totalExperience == levelsBefore + 7, "7 XP points arrive");

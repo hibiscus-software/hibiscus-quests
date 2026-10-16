@@ -60,6 +60,7 @@ public record XpReward(int amount, boolean levels) implements Reward {
 
     @Override
     public Component title() {
-        return Component.translatable(levels ? "hibiscusquests.reward.xp_levels" : "hibiscusquests.reward.xp", amount);
+        String key = levels ? "hibiscusquests.reward.xp_levels" : "hibiscusquests.reward.xp";
+        return Component.translatable(amount == 1 ? key + ".one" : key, amount);
     }
 }

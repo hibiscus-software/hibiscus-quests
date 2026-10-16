@@ -45,6 +45,8 @@ public final class ClientQuestState {
     private static QuestBook book = QuestBook.EMPTY;
     private static String hash = "";
     private static TeamProgress progress = new TeamProgress(NOBODY);
+    // Counts changes, so caches (ClientBook) know when to start over.
+    private static int version;
     private static final List<Runnable> LISTENERS = new CopyOnWriteArrayList<>();
     private static final Map<String, QuestBook> MEMORY = new LinkedHashMap<>(4, 0.75f, true) {
         @Override
@@ -81,7 +83,12 @@ public final class ClientQuestState {
         LISTENERS.remove(listener);
     }
 
+    public static int version() {
+        return version;
+    }
+
     private static void changed() {
+        version++;
         LISTENERS.forEach(Runnable::run);
     }
 
@@ -160,7 +167,10 @@ public final class ClientQuestState {
                 return;
             }
         } else if (payload.teamId().equals(progress.teamId())) {
+            QuestToasts.Before before = QuestToasts.snapshot(book, progress, ClientBook.me());
             progress.applyDelta(payload.data());
+            version++;
+            QuestToasts.afterDelta(book, progress, ClientBook.me(), before, payload.completedNow());
         } else {
             return; // a delta for a team we've just left; the full sync for the new one follows
         }

@@ -1,0 +1,14 @@
+{
+  "quest_complete": {
+    "subtitle": "subtitles.hibiscusquests.quest_complete",
+    "sounds": [{"name": "minecraft:entity.player.levelup", "type": "event", "volume": 0.7}]
+  },
+  "reward_claim": {
+    "subtitle": "subtitles.hibiscusquests.reward_claim",
+    "sounds": [{"name": "minecraft:entity.item.pickup", "type": "event"}]
+  },
+  "chapter_complete": {
+    "subtitle": "subtitles.hibiscusquests.chapter_complete",
+    "sounds": [{"name": "minecraft:ui.toast.challenge_complete", "type": "event", "volume": 0.8}]
+  }
+}
