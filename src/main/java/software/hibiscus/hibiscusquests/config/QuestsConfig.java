@@ -26,6 +26,7 @@ public final class QuestsConfig {
     public static final ModConfigSpec.IntValue MAX_PINNED;
     public static final ModConfigSpec.BooleanValue GIVE_BOOK;
     public static final ModConfigSpec.IntValue EDITOR_LEVEL;
+    public static final ModConfigSpec.IntValue EMERGENCY_COOLDOWN;
 
     static {
         BUILDER.push("progress");
@@ -61,6 +62,13 @@ public final class QuestsConfig {
         GIVE_BOOK = BUILDER
                 .comment("Give each player a Quest Book item the first time they join (the inventory button opens the book anyway).")
                 .define("giveBookOnFirstJoin", false);
+        BUILDER.pop();
+
+        BUILDER.push("emergency");
+        EMERGENCY_COOLDOWN = BUILDER
+                .comment("Seconds a player waits between uses of /hibiscusquests emergency (which gives the book's emergency_items).",
+                        "A book's emergency_cooldown in data.snbt wins.")
+                .defineInRange("cooldown", 300, 0, 7 * 24 * 3600);
         BUILDER.pop();
 
         BUILDER.push("editor");

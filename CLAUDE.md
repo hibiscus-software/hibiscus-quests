@@ -9,8 +9,8 @@ Hibiscus Teams (`hibiscusteams`, optional) progress is per party, without it eve
   textures or lang text.
 - Package `software.hibiscus.hibiscusquests`. The public API lives in its own source set, `src/api/java`
   (`software.hibiscus.hibiscusquests.api`), which can't see the mod's internals; it's also published alone as
-  `hibiscusquests-api`, versioned by `HibiscusQuestsApi.API_VERSION`. It's `0.x` until 1.0.0; from then on it only
-  grows (new default methods and types, never changed signatures). Every API type and method has Javadoc; a missing or
+  `hibiscusquests-api`, versioned by `HibiscusQuestsApi.API_VERSION`. Since 1.0.0 it only grows (new default methods
+  and types, never changed signatures). Every API type and method has Javadoc; a missing or
   broken doc comment fails `./gradlew build` (`apiJavadoc`).
 - Built on Hibiscus Lib (`hibiscuslib_version` in `gradle.properties`); read Lib's `CLAUDE.md`, `docs/API.md` and
   `docs/DEPENDING.md` and use what it has (`BaseScreen` and the widgets, `HibiscusTheme`, `HibiscusToasts`,
@@ -25,13 +25,15 @@ Hibiscus Teams (`hibiscusteams`, optional) progress is per party, without it eve
   local checkout through the `includeBuild` in `settings.gradle` (`../hibiscus-lib` by default; elsewhere pass
   `-Phibiscuslib_dir=...`, e.g. `-Phibiscuslib_dir=../hibiscuslib-template-26.3`).
 - Layout: `book/` the book (the file model and its codecs, `BookMerger` merging the pack's files with chapters shipped
-  as data, `PackFiles` the pack directory, `DataChapters` the data-pack loader, `BookManager` the server's current book),
+  as data, `PackFiles` the pack directory, `DataChapters` the data-pack loader, `BookManager` the server's current book,
+  `BookText` quest text and the pack's translations, `PackArchive` export/import, `ChapterExport` export_chapter),
   `progress/` progress (`TeamProgress` / `QuestState` the data, `QuestLogic` the unlock and completion rules as pure
   functions, `ProgressManager` every change with its events, saving and sync, `ActiveTasks` which tasks each player is
   tracking, `ProgressStorage` the files), `task/` and `reward/` the built-in types (`CriterionTasks` plus
   `mixin/PlayerAdvancementsMixin` for criterion tasks), `network/` payloads and sync (`QuestSync`: the book in chunks
   behind a content hash, progress as per-team deltas, `BookPatch` an edit's changes), `edit/` the editor's server side
-  (`BookEdit` the edits, `BookEditor` checking and applying them to the pack's files, `EditingMode` who's editing),
+  (`BookEdit` the edits, `BookEditor` checking and applying them to the pack's files, `EditingMode` who's editing,
+  `LangExport` export_lang),
   `command/` `/hibiscusquests` (alias `/hquests`), `config/`, `client/` the client's copy and screens (`client/edit/`
   the editor: `ClientEditor` state and undo, `EditActions` every action as edits, `Forms` and `FormPopup` the forms),
   `gametest/` the tests.

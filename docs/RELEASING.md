@@ -43,9 +43,9 @@ Each supported Minecraft version has its own branch, and releases for it are tag
   on the GitHub Release and GitHub Packages, never on CurseForge. (Mods that only ship quests as data need neither.)
 
 If the API changed, raise `API_VERSION` (and its `MAJOR` / `MINOR` / `PATCH` constants) before the release, following
-the API's own semantic versioning; if it didn't, the release attaches the same API version as the last one. The API is
-`0.x` until Hibiscus Quests 1.0.0; from `1.0.0` it only grows: new default methods and types are a minor bump, and
-nothing is changed or removed without a major one.
+the API's own semantic versioning; if it didn't, the release attaches the same API version as the last one. From
+`1.0.0` the API only grows: new default methods and types are a minor bump, and nothing is changed or removed without a
+major one.
 
 ## Hibiscus Lib
 

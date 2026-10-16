@@ -24,10 +24,10 @@ import software.hibiscus.hibiscusquests.book.QuestBook;
 import software.hibiscus.hibiscusquests.book.RewardTable;
 
 // The parts of the book an edit changed, as they are in the new merged book: chapters and reward tables by id (empty
-// when they're gone), and the settings and groups when they changed. Sent to clients instead of the whole book after
+// when they're gone), and the settings, groups and the pack's translations when they changed. Sent to clients instead of the whole book after
 // an edit; a client applies it to the book it has, if that's the book the patch was made from.
 public record BookPatch(Optional<BookSettings> settings, Optional<List<ChapterGroup>> groups, Map<String, Optional<Chapter>> chapters,
-        Map<String, Optional<RewardTable>> tables) {
+        Map<String, Optional<RewardTable>> tables, Optional<Map<String, Map<String, String>>> lang) {
     private record ChapterEntry(String id, Optional<Chapter> chapter) {
         static final Codec<ChapterEntry> CODEC = RecordCodecBuilder.create(i -> i.group(
                 Codec.STRING.fieldOf("id").forGetter(ChapterEntry::id),
@@ -48,13 +48,14 @@ public record BookPatch(Optional<BookSettings> settings, Optional<List<ChapterGr
             BookCodecs.list("chapters", ChapterEntry.CODEC).forGetter(patch -> patch.chapters.entrySet().stream()
                     .map(entry -> new ChapterEntry(entry.getKey(), entry.getValue())).toList()),
             BookCodecs.list("tables", TableEntry.CODEC).forGetter(patch -> patch.tables.entrySet().stream()
-                    .map(entry -> new TableEntry(entry.getKey(), entry.getValue())).toList()))
-            .apply(i, (settings, groups, chapters, tables) -> {
+                    .map(entry -> new TableEntry(entry.getKey(), entry.getValue())).toList()),
+            QuestBook.LANG_CODEC.optionalFieldOf("lang").forGetter(BookPatch::lang))
+            .apply(i, (settings, groups, chapters, tables, lang) -> {
                 Map<String, Optional<Chapter>> chapterMap = new LinkedHashMap<>();
                 chapters.forEach(entry -> chapterMap.put(entry.id(), entry.chapter()));
                 Map<String, Optional<RewardTable>> tableMap = new LinkedHashMap<>();
                 tables.forEach(entry -> tableMap.put(entry.id(), entry.table()));
-                return new BookPatch(settings, groups, chapterMap, tableMap);
+                return new BookPatch(settings, groups, chapterMap, tableMap, lang);
             }));
 
     // What changed in a book after an edit: the touched parts, as they are in the new (merged) book. A chapter the
@@ -64,7 +65,8 @@ public record BookPatch(Optional<BookSettings> settings, Optional<List<ChapterGr
         change.chapters().keySet().forEach(id -> chapters.put(id, book.sourceChapter(id)));
         Map<String, Optional<RewardTable>> tables = new LinkedHashMap<>();
         change.tables().keySet().forEach(id -> tables.put(id, book.table(id)));
-        return new BookPatch(change.settings().map(tag -> book.settings()), change.groups().map(tag -> book.groups()), chapters, tables);
+        return new BookPatch(change.settings().map(tag -> book.settings()), change.groups().map(tag -> book.groups()), chapters, tables,
+                change.lang().isEmpty() ? Optional.empty() : Optional.of(book.lang()));
     }
 
     // The book with the patch applied.
@@ -85,6 +87,6 @@ public record BookPatch(Optional<BookSettings> settings, Optional<List<ChapterGr
             }
         }
         tables.values().forEach(table -> table.ifPresent(newTables::add));
-        return QuestBook.build(newSettings, newGroups, newChapters, newTables, warning -> {});
+        return QuestBook.build(newSettings, newGroups, newChapters, newTables, lang.orElse(book.lang()), warning -> {});
     }
 }

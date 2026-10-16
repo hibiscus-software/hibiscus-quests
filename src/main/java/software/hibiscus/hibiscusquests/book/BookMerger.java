@@ -51,7 +51,12 @@ public final class BookMerger {
     }
 
     // The sources merged but not yet decoded.
-    public record Merged(CompoundTag settings, List<RawFile> groups, List<RawFile> chapters, List<RawFile> tables) {}
+    public record Merged(CompoundTag settings, List<RawFile> groups, List<RawFile> chapters, List<RawFile> tables,
+            Map<String, Map<String, String>> lang) {
+        public Merged(CompoundTag settings, List<RawFile> groups, List<RawFile> chapters, List<RawFile> tables) {
+            this(settings, groups, chapters, tables, Map.of());
+        }
+    }
 
     public static Merged merge(BookSources sources, Consumer<String> warnings) {
         CompoundTag settings = sources.settings().map(CompoundTag::copy).orElseGet(CompoundTag::new);
@@ -136,7 +141,21 @@ public final class BookMerger {
                 tables.put(file.id(), new RawFile(file.id(), Optional.empty(), file.tag(), file.origin()));
             }
         }
-        return new Merged(settings, List.copyOf(groups.values()), List.copyOf(chapters.values()), List.copyOf(tables.values()));
+        // The pack's translations: strings only.
+        Map<String, Map<String, String>> lang = new LinkedHashMap<>();
+        sources.packLang().forEach((locale, tag) -> {
+            Map<String, String> entries = new LinkedHashMap<>();
+            for (String key : tag.keySet()) {
+                Optional<String> text = tag.get(key).asString();
+                if (text.isPresent()) {
+                    entries.put(key, text.get());
+                } else {
+                    warnings.accept("lang/" + locale + ".snbt: " + key + " isn't text");
+                }
+            }
+            lang.put(locale, entries);
+        });
+        return new Merged(settings, List.copyOf(groups.values()), List.copyOf(chapters.values()), List.copyOf(tables.values()), lang);
     }
 
     // A pack chapter laid over a mod chapter (merge: true).
@@ -215,6 +234,6 @@ public final class BookMerger {
             }
             tables.add(result.result().get().withId(file.id(), file.source()));
         }
-        return QuestBook.build(settings, groups, chapters, tables, warnings);
+        return QuestBook.build(settings, groups, chapters, tables, merged.lang(), warnings);
     }
 }

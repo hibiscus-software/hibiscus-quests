@@ -89,6 +89,21 @@ public final class TeamProgress {
         return true;
     }
 
+    // How much of this progress is for quests no longer in the book (by "chapter/quest").
+    int countMissing(Set<String> questKeys) {
+        return (int) quests.keySet().stream().filter(key -> !questKeys.contains(key)).count();
+    }
+
+    // Drops progress, pins and chapter completions for quests and chapters no longer in the book; returns how many
+    // quests' progress went.
+    int removeMissing(Set<String> questKeys, Set<String> chapterIds) {
+        int before = quests.size();
+        quests.keySet().removeIf(key -> !questKeys.contains(key));
+        completedChapters.removeIf(id -> !chapterIds.contains(id));
+        pinned.values().forEach(list -> list.removeIf(key -> !questKeys.contains(key)));
+        return before - quests.size();
+    }
+
     public boolean isEmpty() {
         return quests.values().stream().allMatch(QuestState::isEmpty) && completedChapters.isEmpty();
     }

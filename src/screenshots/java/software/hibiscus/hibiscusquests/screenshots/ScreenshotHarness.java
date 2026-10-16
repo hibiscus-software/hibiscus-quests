@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -43,6 +44,7 @@ import software.hibiscus.hibiscusquests.HibiscusQuests;
 import software.hibiscus.hibiscusquests.QuestItems;
 import software.hibiscus.hibiscusquests.api.QuestRef;
 import software.hibiscus.hibiscusquests.book.BookManager;
+import software.hibiscus.hibiscusquests.book.BookText;
 import software.hibiscus.hibiscusquests.book.Chapter;
 import software.hibiscus.hibiscusquests.book.Quest;
 import software.hibiscus.hibiscusquests.client.ClientBook;
@@ -53,6 +55,7 @@ import software.hibiscus.hibiscusquests.client.screen.QuestBookScreen;
 import software.hibiscus.hibiscusquests.edit.BookEdit;
 import software.hibiscus.hibiscusquests.edit.BookEditor;
 import software.hibiscus.hibiscusquests.edit.EditingMode;
+import software.hibiscus.hibiscusquests.edit.LangExport;
 import software.hibiscus.hibiscusquests.item.LootCrateItem;
 import software.hibiscus.hibiscusquests.network.QuestSync;
 import software.hibiscus.hibiscusquests.progress.ProgressManager;
@@ -429,6 +432,22 @@ public final class ScreenshotHarness {
         }), 5);
         shot("edit_tables_" + tag);
         then(() -> withBook(minecraft, QuestBookScreen::closePopups), 2);
+        // Translations: export_lang moves the tour's text into the pack's lang file; the client shows the text (not
+        // the key), and the editor saving a translated title changes the translation, not the chapter.
+        onServer(minecraft, server -> BookEditor.apply(server, LangExport.edits(server, BookText.DEFAULT_LOCALE).edits()));
+        then(() -> {
+            Quest start = ClientBook.book().quest(new QuestRef(TOUR, "start")).orElse(null);
+            report("translated titles show their text", start != null && start.title().startsWith("{translate:")
+                    && !BookText.component(start.title()).getString().startsWith("quests."));
+            String key = start == null ? "" : BookText.keyOf(start.title()).orElse("");
+            EditActions.withLang(Map.of(key, "Welcome, edited"), () -> EditActions.putQuest(TOUR, "start", EditActions.encodeQuest(start), "edit_quest"));
+        }, 20);
+        then(() -> {
+            Quest start = ClientBook.book().quest(new QuestRef(TOUR, "start")).orElse(null);
+            report("editing translated text changes the translation", start != null
+                    && BookText.component(start.title()).getString().equals("Welcome, edited"));
+            report("the client still has the server's book", ClientQuestState.hash().equals(QuestSync.bookHash()));
+        }, 2);
         onServer(minecraft, server -> {
             ServerPlayer player = server.getPlayerList().getPlayer(self);
             if (player != null) {

@@ -166,6 +166,17 @@ public final class QuestPayloads {
         }
     }
 
+    // Show quest text in another locale ("" for the player's own): /hibiscusquests locale.
+    public record PreviewLocale(String locale) implements CustomPacketPayload {
+        public static final Type<PreviewLocale> TYPE = payloadType("preview_locale");
+        public static final StreamCodec<ByteBuf, PreviewLocale> STREAM_CODEC = ByteBufCodecs.stringUtf8(32).map(PreviewLocale::new, PreviewLocale::locale);
+
+        @Override
+        public Type<PreviewLocale> type() {
+            return TYPE;
+        }
+    }
+
     // ---- Client to server ----
 
     // Edits from the book's editor, applied together or not at all.

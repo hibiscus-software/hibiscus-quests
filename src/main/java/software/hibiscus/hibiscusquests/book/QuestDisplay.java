@@ -42,8 +42,8 @@ public record QuestDisplay(String title, String subtitle, Optional<BookIcon> ico
         description = List.copyOf(description);
     }
 
-    // The description split into pages at "---" lines.
+    // The description split into pages at "---" lines, with translated lines (BookText.lines) in place.
     public List<List<String>> pages() {
-        return BookCodecs.pages(description);
+        return BookCodecs.pages(BookText.lines(description));
     }
 }

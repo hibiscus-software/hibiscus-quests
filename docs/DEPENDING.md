@@ -45,10 +45,10 @@ repositories {
 
 dependencies {
     // The API: compiled against, never shipped in your jar.
-    compileOnly "software.hibiscus.hibiscusquests:hibiscusquests-api:0.1.0+26.3"
+    compileOnly "software.hibiscus.hibiscusquests:hibiscusquests-api:1.0.0+26.3"
     // Optional: Hibiscus Quests (and Hibiscus Lib) in your dev runs, to try your quests.
     localRuntime "software.hibiscus.hibiscusquests:hibiscusquests:1.0.0+26.3"
-    localRuntime "software.hibiscus.hibiscuslib:hibiscuslib:1.3.0+26.3"
+    localRuntime "software.hibiscus.hibiscuslib:hibiscuslib:1.4.0+26.3"
 }
 ```
 
@@ -80,8 +80,8 @@ constructor, on both sides.
 ## Versions
 
 The API jar has its own version (`HibiscusQuestsApi.API_VERSION`), separate from the mod's; a mod release that doesn't
-change the API ships the same API version as the one before. Before Hibiscus Quests 1.0.0 the API is `0.x` and may
-change between minor versions; from 1.0.0 it only grows, so a mod built against API 1.2 runs with any later 1.x.
+change the API ships the same API version as the one before. From 1.0.0 the API only grows, so a mod built against
+API 1.2 runs with any later 1.x.
 Each Minecraft version has its own builds (`+26.3`), from the matching branch.
 
 ## Working on Hibiscus Quests itself

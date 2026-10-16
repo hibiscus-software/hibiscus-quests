@@ -44,6 +44,9 @@ public final class QuestItems {
     // Whether the player has been given the Quest Book on joining (giveBookOnFirstJoin).
     public static final Supplier<AttachmentType<Boolean>> BOOK_GIVEN = ATTACHMENTS.register("book_given",
             () -> AttachmentType.builder(() -> false).serialize(Codec.BOOL.fieldOf("given")).copyOnDeath().build());
+    // When the player last used /hibiscusquests emergency (epoch milliseconds), for its cooldown.
+    public static final Supplier<AttachmentType<Long>> EMERGENCY_USED = ATTACHMENTS.register("emergency_used",
+            () -> AttachmentType.builder(() -> 0L).serialize(Codec.LONG.fieldOf("used")).copyOnDeath().build());
 
     private QuestItems() {}
 

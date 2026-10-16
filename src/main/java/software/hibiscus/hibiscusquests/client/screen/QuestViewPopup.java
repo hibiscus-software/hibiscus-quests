@@ -275,6 +275,9 @@ final class QuestViewPopup extends Popup {
 
     // {quest:chapter/quest} in a description: the quest's title, as a link that opens it.
     private Component token(String name, String argument, net.minecraft.network.chat.Style style) {
+        if (name.equals("translate")) {
+            return BookText.component("{translate:" + argument + "}").copy().setStyle(style);
+        }
         if (!name.equals("quest")) {
             return null;
         }

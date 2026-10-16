@@ -26,7 +26,7 @@ import software.hibiscus.hibiscusquests.progress.ProgressManager;
 // complete or the task active for the sender's own team.
 public final class QuestNetwork {
     // Bumped whenever a payload changes; clients and servers must match.
-    public static final String VERSION = "4";
+    public static final String VERSION = "5";
 
     private static final RateLimiter BOOK_REQUESTS = new RateLimiter(3, 0.2);
     private static final RateLimiter CLAIMS = new RateLimiter(20, 10);
@@ -47,6 +47,7 @@ public final class QuestNetwork {
                 .toClient(QuestPayloads.EditorState.TYPE, QuestPayloads.EditorState.STREAM_CODEC, (payload, context) -> ClientBridge.editorState(payload))
                 .toClient(QuestPayloads.EditResult.TYPE, QuestPayloads.EditResult.STREAM_CODEC, (payload, context) -> ClientBridge.editResult(payload))
                 .toClient(QuestPayloads.RegistryList.TYPE, QuestPayloads.RegistryList.STREAM_CODEC, (payload, context) -> ClientBridge.registryList(payload))
+                .toClient(QuestPayloads.PreviewLocale.TYPE, QuestPayloads.PreviewLocale.STREAM_CODEC, (payload, context) -> ClientBridge.previewLocale(payload))
                 .toServer(QuestPayloads.Edit.TYPE, QuestPayloads.Edit.STREAM_CODEC, QuestNetwork::edit)
                 .toServer(QuestPayloads.SetEditing.TYPE, QuestPayloads.SetEditing.STREAM_CODEC, QuestNetwork::setEditing)
                 .toServer(QuestPayloads.RegistryRequest.TYPE, QuestPayloads.RegistryRequest.STREAM_CODEC, QuestNetwork::registryRequest)

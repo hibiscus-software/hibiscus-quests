@@ -222,6 +222,7 @@ public final class ClientQuestState {
         incoming = null;
         chunks = null;
         ClientEditor.clear();
+        ClientLang.clear();
         changed();
     }
 

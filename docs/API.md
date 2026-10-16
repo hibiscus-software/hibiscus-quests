@@ -39,11 +39,24 @@ Chapter ids are shared by every mod in the book, so prefix yours with your mod i
 
 ### The easiest way to write them
 
-Build the chapter in the in-game editor in a dev world, then export it as mod-ready files with
-`/hibiscusquests export_chapter <chapter> <your mod id>`; it writes them to
-`hibiscusquests_exports/data/<your mod id>/hibiscusquests/`, ready to copy into `src/main/resources/`. (`export_chapter`
-arrives with Hibiscus Quests 1.0.0; until then, copy the chapter's file from `config/hibiscusquests/chapters/`. The
-files are the same either way, and can always be written by hand.)
+1. In a dev world, turn on edit mode (the pencil in the book's top bar) and build the chapter. Give it an id that
+   starts with your mod id (`arcforge_steelmaking`).
+2. To have it translated, run `/hibiscusquests export_lang en_us`: the chapter's text moves into the pack's
+   `lang/en_us.snbt` under keys (`quests.arcforge_steelmaking.furnace.title`), with `{translate:...}` in the chapter.
+3. Run `/hibiscusquests export_chapter <chapter> <your mod id>`. In `hibiscusquests_exports/` in the dev run folder
+   it writes:
+
+   ```
+   data/<your mod id>/hibiscusquests/chapters/<chapter>.snbt
+   data/<your mod id>/hibiscusquests/chapter_groups.snbt       its group, if it has one
+   data/<your mod id>/hibiscusquests/reward_tables/<id>.snbt   the tables its rewards roll
+   assets/<your mod id>/lang/<locale>.json                     its translations, one file per locale
+   ```
+
+4. Copy `data/` and `assets/` into `src/main/resources/` (merging the lang JSON into your mod's own), and declare
+   Hibiscus Quests as an optional dependency as above.
+
+The files can always be written by hand too: they're the same format.
 
 ### The chapter file
 
@@ -208,7 +221,9 @@ in `data.snbt` or the server's `rewards.lootCrateDrops` is off. A crate's reward
 #### Text
 
 Titles, subtitles and descriptions may be plain text (with `&` formatting codes), a lang key (`mymod.quest.wrench`,
-shown as written when there's no translation), or `{translate:mymod.quest.wrench}`. Ship the translations in your
+shown as written when there's no translation), or `{translate:mymod.quest.wrench}`. A description that's a single key
+is replaced by its translation's lines (pages and all), and `{translate:key}` also works inside a line. Keys are
+looked up in the pack's own `lang/<locale>.snbt` first, then in the game's languages. Ship the translations in your
 mod's `assets/<your mod id>/lang/` files to have your quests translated. Descriptions also take `# headings`,
 `- bullets`, `**bold**`, `*italic*`, `[links](https://...)`, `{item:id}`, `{quest:chapter/quest}` and
 `{image:<texture> <width> <height>}` on a line of its own (a texture path such as
@@ -381,5 +396,5 @@ The pack's own files, which the in-game editor reads and writes, are in `config/
 
 `HibiscusQuestsApi.API_VERSION` follows semantic versioning on its own, separately from the mod: a patch for docs and
 fixes, a minor for additions (new types, new **default** methods on interfaces, new enum constants), a major for any
-change or removal. It's `0.x` until Hibiscus Quests 1.0.0 and may still change between minor versions until then; from
-1.0.0 the API only grows.
+change or removal. It's 1.0.0 as of Hibiscus Quests 1.0.0, and from here it only grows: nothing is changed or removed
+without a major version.

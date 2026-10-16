@@ -7,13 +7,17 @@
 package software.hibiscus.hibiscusquests.progress;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import org.jspecify.annotations.Nullable;
 
@@ -32,9 +36,7 @@ import software.hibiscus.hibiscusquests.api.event.ChapterCompletedEvent;
 import software.hibiscus.hibiscusquests.api.event.QuestCompletedEvent;
 import software.hibiscus.hibiscusquests.api.event.RewardClaimedEvent;
 import software.hibiscus.hibiscusquests.api.event.TaskProgressEvent;
-import software.hibiscus.hibiscusquests.api.reward.Reward;
 import software.hibiscus.hibiscusquests.api.reward.RewardContext;
-import software.hibiscus.hibiscusquests.api.reward.RewardType;
 import software.hibiscus.hibiscusquests.book.AutoClaim;
 import software.hibiscus.hibiscusquests.book.BookManager;
 import software.hibiscus.hibiscusquests.book.BookText;
@@ -143,6 +145,52 @@ public final class ProgressManager {
             scheduleCooldowns(progress);
         }
         return progress;
+    }
+
+    // What /hibiscusquests cleanup found (or did): teams looked at, teams with progress for quests no longer in the
+    // book, and how many quests' progress that is.
+    public record CleanupReport(int teams, int teamsChanged, int quests) {}
+
+    // Progress is kept for quests that leave the book (so putting a quest back keeps it); cleanup drops it, for every
+    // team with a progress file, online or not. With apply false it only counts.
+    public static CleanupReport cleanup(boolean apply) {
+        QuestBook book = BookManager.book();
+        Set<String> questKeys = new HashSet<>();
+        book.quests().forEach(quest -> questKeys.add(quest.ref().toString()));
+        Set<String> chapterIds = new HashSet<>();
+        book.chapters().forEach(chapter -> chapterIds.add(chapter.id()));
+        Set<UUID> teamIds = new LinkedHashSet<>(TEAMS.keySet());
+        if (storage != null && Files.isDirectory(storage.directory())) {
+            try (Stream<Path> files = Files.list(storage.directory())) {
+                files.map(path -> path.getFileName().toString()).filter(name -> name.matches("[0-9a-f-]{36}\\.snbt"))
+                        .forEach(name -> teamIds.add(UUID.fromString(name.substring(0, 36))));
+            } catch (IOException e) {
+                HibiscusQuests.LOGGER.warn("Couldn't list the progress files", e);
+            }
+        }
+        int changed = 0;
+        int quests = 0;
+        for (UUID teamId : teamIds) {
+            TeamProgress progress = progress(teamId);
+            if (storage != null && storage.isBroken(teamId)) {
+                continue;
+            }
+            int missing = progress.countMissing(questKeys);
+            if (missing == 0) {
+                continue;
+            }
+            changed++;
+            quests += missing;
+            if (apply) {
+                progress.removeMissing(questKeys, chapterIds);
+                DIRTY.add(teamId);
+                QuestSync.queueFull(teamId);
+            }
+        }
+        if (apply) {
+            saveAll();
+        }
+        return new CleanupReport(teamIds.size(), changed, quests);
     }
 
     public static TeamProgress progressOf(ServerPlayer player) {

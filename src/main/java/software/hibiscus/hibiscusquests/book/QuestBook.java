@@ -31,13 +31,18 @@ import software.hibiscus.hibiscusquests.api.book.BookView;
 public final class QuestBook implements BookView {
     public static final QuestBook EMPTY = build(BookSettings.DEFAULT, List.of(), List.of(), List.of(), warning -> {});
 
+    // The pack's translations: locale to key to text.
+    public static final Codec<Map<String, Map<String, String>>> LANG_CODEC = Codec.unboundedMap(Codec.STRING,
+            Codec.unboundedMap(Codec.STRING, Codec.STRING));
+
     // What the server sends: everything, including each chapter's source.
     public static final Codec<QuestBook> NETWORK_CODEC = RecordCodecBuilder.create(i -> i.group(
             BookSettings.CODEC.fieldOf("settings").forGetter(QuestBook::settings),
             BookCodecs.list("groups", ChapterGroup.CODEC).forGetter(QuestBook::groups),
             BookCodecs.list("chapters", Chapter.NETWORK_CODEC).forGetter(QuestBook::sourceChapters),
-            BookCodecs.list("reward_tables", RewardTable.NETWORK_CODEC).forGetter(book -> List.copyOf(book.tables.values())))
-            .apply(i, (settings, groups, chapters, tables) -> build(settings, groups, chapters, tables, warning -> {})));
+            BookCodecs.list("reward_tables", RewardTable.NETWORK_CODEC).forGetter(book -> List.copyOf(book.tables.values())),
+            LANG_CODEC.optionalFieldOf("lang", Map.of()).forGetter(QuestBook::lang))
+            .apply(i, (settings, groups, chapters, tables, lang) -> build(settings, groups, chapters, tables, lang, warning -> {})));
 
     // A chapter gate entry: a whole chapter, or one quest.
     public record Requirement(Optional<String> chapter, Optional<QuestRef> quest) {}
@@ -55,9 +60,14 @@ public final class QuestBook implements BookView {
     private final Map<QuestRef, Set<QuestRef>> oneOfSiblings;
     private final Map<String, List<Requirement>> chapterRequirements;
     private final Map<String, RewardTable> tables;
+    private final Map<String, Map<String, String>> lang;
 
     private QuestBook(BookSettings settings, List<ChapterGroup> groups, List<Chapter> chapters, List<Chapter> sourceChapters,
-            Map<QuestRef, Quest> quests, Map<String, List<Requirement>> chapterRequirements, Map<String, RewardTable> tables) {
+            Map<QuestRef, Quest> quests, Map<String, List<Requirement>> chapterRequirements, Map<String, RewardTable> tables,
+            Map<String, Map<String, String>> lang) {
+        Map<String, Map<String, String>> langCopy = new LinkedHashMap<>();
+        lang.forEach((locale, entries) -> langCopy.put(locale, Collections.unmodifiableMap(new LinkedHashMap<>(entries))));
+        this.lang = Collections.unmodifiableMap(langCopy);
         this.sourceChapters = List.copyOf(sourceChapters);
         Map<String, Chapter> sources = new LinkedHashMap<>();
         sourceChapters.forEach(chapter -> sources.putIfAbsent(chapter.id(), chapter));
@@ -102,6 +112,11 @@ public final class QuestBook implements BookView {
     // gates that point nowhere (each reported to warnings), and indexes everything.
     public static QuestBook build(BookSettings settings, List<ChapterGroup> groups, List<Chapter> chapters, List<RewardTable> rewardTables,
             Consumer<String> warnings) {
+        return build(settings, groups, chapters, rewardTables, Map.of(), warnings);
+    }
+
+    public static QuestBook build(BookSettings settings, List<ChapterGroup> groups, List<Chapter> chapters, List<RewardTable> rewardTables,
+            Map<String, Map<String, String>> lang, Consumer<String> warnings) {
         List<ChapterGroup> sortedGroups = new ArrayList<>(groups);
         sortedGroups.sort(Comparator.comparingInt(ChapterGroup::order).thenComparing(ChapterGroup::id));
         Map<String, Integer> groupRank = new HashMap<>();
@@ -183,7 +198,18 @@ public final class QuestBook implements BookView {
                 }
             }
         }
-        return new QuestBook(settings, sortedGroups, cleanedChapters, sortedChapters, quests, requirements, tables);
+        return new QuestBook(settings, sortedGroups, cleanedChapters, sortedChapters, quests, requirements, tables, lang);
+    }
+
+    // The pack's translations (lang/<locale>.snbt), locale to key to text.
+    public Map<String, Map<String, String>> lang() {
+        return lang;
+    }
+
+    // A pack translation of a key in a locale.
+    public Optional<String> translation(String locale, String key) {
+        Map<String, String> entries = lang.get(locale);
+        return entries == null ? Optional.empty() : Optional.ofNullable(entries.get(key));
     }
 
     public Optional<RewardTable> table(String id) {

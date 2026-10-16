@@ -27,6 +27,7 @@ import com.mojang.serialization.DynamicOps;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.ByteTag;
@@ -62,6 +63,7 @@ import software.hibiscus.hibiscusquests.book.BookText;
 import software.hibiscus.hibiscusquests.book.Quest;
 import software.hibiscus.hibiscusquests.book.RewardTable;
 import software.hibiscus.hibiscusquests.client.ClientBook;
+import software.hibiscus.hibiscusquests.client.ClientLang;
 import software.hibiscus.hibiscusquests.client.QuestDraw;
 
 // A form for one object of the book (a quest, a task, a chapter, the settings...), from a list of fields (Forms). It
@@ -83,6 +85,8 @@ public final class FormPopup extends Popup {
     // The text in each text field as typed, valid or not, and the fields whose text doesn't parse.
     private final Map<String, String> texts = new HashMap<>();
     private final Set<String> invalid = new HashSet<>();
+    // Translated text the form changed (key to text, in ClientLang's locale): saved to the pack's lang file, not here.
+    private final Map<String, String> langChanges = new HashMap<>();
     private @Nullable Component error;
     private double scroll;
     private @Nullable ScrollPanel body;
@@ -193,14 +197,17 @@ public final class FormPopup extends Popup {
                 }), x, y);
             }
             case LONG_TEXT -> {
-                String text = longText(path);
+                Optional<String> key = translationKey(path, kind);
+                String text = key.map(this::translatedText).orElseGet(() -> longText(path));
                 String firstLine = text.lines().findFirst().orElse("");
                 Component preview = firstLine.isBlank() ? Component.translatable("hibiscusquests.form.empty") : BookText.component(firstLine);
                 panel.add(new Caption(width - 56, preview, Caption.Style.MUTED), x, y + 5);
                 panel.add(new TextButton(0, 0, 52, 18, Component.translatable("hibiscusquests.form.edit_text"), button -> {
                     if (screen() != null) {
                         screen().openPopup(new RichTextPopup(field.label(), text, chapter, edited -> {
-                            if (edited.isBlank()) {
+                            if (key.isPresent()) {
+                                langChanges.put(key.get(), edited);
+                            } else if (edited.isBlank()) {
                                 put(path, null);
                             } else {
                                 ListTag lines = new ListTag();
@@ -270,15 +277,44 @@ public final class FormPopup extends Popup {
         String path = field.path();
         TextInput input = new TextInput(0, 0, width, 18, field.label());
         input.setMaxLength(32767);
-        input.setValue(texts.getOrDefault(path, toText(get(path), kind)));
+        Optional<String> key = translationKey(path, kind);
+        input.setValue(texts.getOrDefault(path, key.map(this::translatedText).orElseGet(() -> toText(get(path), kind))));
         input.placeholder(kind == Kind.STRING_LIST ? Component.translatable("hibiscusquests.form.list_hint")
                 : Component.translatable("hibiscusquests.form.default"));
         input.validator(text -> parse(kind, text).ok());
         input.setResponder(text -> {
             texts.put(path, text);
-            apply(path, kind, text);
+            if (key.isPresent()) {
+                langChanges.put(key.get(), text);
+            } else {
+                apply(path, kind, text);
+            }
         });
+        if (key.isPresent()) {
+            input.setTooltip(Tooltip.create(Component.translatable("hibiscusquests.form.translated", key.get(), ClientLang.locale())));
+        }
         return input;
+    }
+
+    // The pack translation key a text field holds ({translate:key} or a bare key the pack translates), if it does:
+    // the form then edits the translation, in the locale the book is shown in.
+    private Optional<String> translationKey(String path, @Nullable Kind kind) {
+        if (kind != Kind.TEXT && kind != Kind.LONG_TEXT) {
+            return Optional.empty();
+        }
+        Tag tag = get(path);
+        if (tag instanceof ListTag list && list.size() == 1) {
+            tag = list.get(0);
+        }
+        return tag == null ? Optional.empty() : tag.asString().flatMap(BookText::keyOf).filter(EditActions::isPackKey);
+    }
+
+    private String translatedText(String key) {
+        if (langChanges.containsKey(key)) {
+            return langChanges.get(key);
+        }
+        return ClientBook.book().translation(ClientLang.locale(), key)
+                .or(() -> ClientBook.book().translation(BookText.DEFAULT_LOCALE, key)).orElse("");
     }
 
     private IconButton iconButton(Identifier sprite, String tooltip, Runnable action) {
@@ -560,7 +596,11 @@ public final class FormPopup extends Popup {
             return;
         }
         close();
-        onSave.accept(result);
+        if (langChanges.isEmpty()) {
+            onSave.accept(result);
+        } else {
+            EditActions.withLang(Map.copyOf(langChanges), () -> onSave.accept(result));
+        }
     }
 
     private static <T> Optional<String> check(Codec<T> codec, CompoundTag tag) {

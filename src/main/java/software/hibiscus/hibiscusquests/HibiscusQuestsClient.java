@@ -21,7 +21,9 @@ import software.hibiscus.hibiscuslib.button.ButtonBadge;
 import software.hibiscus.hibiscuslib.button.ButtonSpec;
 import software.hibiscus.hibiscuslib.button.HibiscusButtons;
 import software.hibiscus.hibiscuslib.client.gui.HibiscusTheme;
+import software.hibiscus.hibiscusquests.book.BookText;
 import software.hibiscus.hibiscusquests.client.ClientBook;
+import software.hibiscus.hibiscusquests.client.ClientLang;
 import software.hibiscus.hibiscusquests.client.ClientQuestState;
 import software.hibiscus.hibiscusquests.client.PinnedHud;
 import software.hibiscus.hibiscusquests.client.QuestsClientConfig;
@@ -56,5 +58,6 @@ public class HibiscusQuestsClient {
         QuestBookItem.opener = QuestBookScreen::open;
         modEventBus.addListener((RegisterGuiLayersEvent event) -> event.registerAboveAll(HibiscusQuests.id("pinned_quests"), PinnedHud::render));
         TableRewards.ClientBookAccess.set(ClientQuestState::book);
+        BookText.setClientLookup(ClientLang::lookup);
     }
 }

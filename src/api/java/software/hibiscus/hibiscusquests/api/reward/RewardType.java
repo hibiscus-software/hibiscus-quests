@@ -53,7 +53,6 @@ public interface RewardType<R extends Reward> {
      * their current value (or a text box for their SNBT). See {@link FieldHint}.
      *
      * @return hints by field name; empty by default
-     * @since 0.4.0
      */
     default Map<String, FieldHint> editorHints() {
         return Map.of();

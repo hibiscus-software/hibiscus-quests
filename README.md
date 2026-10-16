@@ -12,9 +12,6 @@ it, every player has their own.
 
 ![A chapter of the quest book](docs/images/book.png)
 
-> **In development.** The book works end to end (the files, the rules, the screens, every task and reward type,
-> reward tables, the in-game editor, saving and syncing); localisation, import and export are next.
-
 ## The book
 
 Open it from the button by the inventory (its badge counts the rewards waiting for you), the "Open Quest Book" key
@@ -87,6 +84,8 @@ config/hibiscusquests/
   data.snbt                  book settings
   chapter_groups.snbt        {groups: [{id: "basics", title: "The Basics", icon: "minecraft:crafting_table"}]}
   chapters/<chapter id>.snbt one chapter per file
+  reward_tables/<id>.snbt    reward tables
+  lang/<locale>.snbt         translations, {"quests.basics.wood.title": "Punch a Tree", ...}
 ```
 
 The files are SNBT, with readable ids (`steel_ingot`, not random hex), so they can be written and reviewed by hand. A
@@ -125,6 +124,23 @@ overwritten). Chapters that mods ship can be replaced by a file with the same id
 - **Demo:** a small book showing each task type ships as a data pack; turn it on with `/datapack enable` (find it with
   `/datapack list`).
 
+### Translating a pack
+
+`/hibiscusquests export_lang en_us` moves every piece of text in the pack's files (titles, subtitles, descriptions,
+task titles, labels, group and table names) into `lang/en_us.snbt` under readable keys, and leaves
+`{translate:quests.basics.wood.title}` in its place. Run it again for another locale (`export_lang de_de`) to get a
+file for translators that starts from the English text. Players see the translation for their language, falling back
+to `en_us`; `/hibiscusquests locale <locale>` previews another one (and `/hibiscusquests locale` goes back). In edit
+mode, translated text is edited in the language the book is showing, straight into that locale's file.
+
+### Moving a book
+
+`/hibiscusquests export` zips the book's files into `hibiscusquests_exports/` in the server folder;
+`/hibiscusquests import <zip>` puts a zip from there in place of the current book, after checking that every file in
+it reads (the book it replaces is zipped first, and its files go to `.trash/`). Progress stays with each world:
+`/hibiscusquests cleanup` lists the progress kept for quests that are no longer in the book, and `cleanup confirm`
+drops it.
+
 ## For mod developers
 
 Ship your quests in your jar under `data/<your mod id>/hibiscusquests/`, with no code and no compile dependency. A
@@ -143,11 +159,18 @@ Ship your quests in your jar under `data/<your mod id>/hibiscusquests/`, with no
 | `open [quest]` | everyone | opens the book, on a quest (`chapter/quest`) if given |
 | `claim_all` | everyone | claims every reward you can, except those left out of Claim all |
 | `pin <quest>` | everyone | pins the quest to your screen, or unpins it |
+| `emergency` | everyone | gives the book's `emergency_items`, once per `emergency_cooldown` |
+| `locale [locale]` | everyone | shows the book in another locale's translation; with none, your own again |
 | `reload` | ops (`hibiscusquests.admin.reload`) | reads the pack's files again |
 | `change_progress <player\|team> <reset\|complete> <quest\|chapter\|*>` | ops (`hibiscusquests.admin.change_progress`) | a quest is `chapter/quest`; players may be offline; a team is its short name or id |
 | `debug <quest>` | ops (`hibiscusquests.admin.debug`) | why the quest is locked, and each task's progress (for someone else: `/execute as <player> run hquests debug ...`) |
 | `editing_mode [on\|off] [player]` | editors (`hibiscusquests.editor`) | turns edit mode on or off (with neither, switches it); putting another player in edit mode lets them edit until they log out |
 | `generate_chapter <title>` | editors (`hibiscusquests.editor`) | a new chapter with a quest per item in the container you're looking at |
+| `export_lang <locale>` | editors (`hibiscusquests.editor`) | moves the pack's text into `lang/<locale>.snbt` (and `en_us`) under keys |
+| `export` | ops (`hibiscusquests.admin.export`) | zips the book's files into `hibiscusquests_exports/` |
+| `export_chapter <chapter> <namespace>` | ops (`hibiscusquests.admin.export`) | writes the chapter, its group, tables and translations as a mod ships them, into `hibiscusquests_exports/` |
+| `import <zip>` | ops (`hibiscusquests.admin.import`) | replaces the book with a zip from `hibiscusquests_exports/` (keeping a zip of the old one) |
+| `cleanup [confirm]` | ops (`hibiscusquests.admin.cleanup`) | counts, then with `confirm` drops, progress for quests no longer in the book |
 
 The permission nodes default to op level 2 (`hibiscusquests.editor` to `editor.permissionLevel`); a permissions mod can
 grant them more finely.
@@ -174,6 +197,7 @@ The server's, `config/hibiscusquests-server.toml` (a world's `syncedconfig/` cop
 | `progress.teamChange` | `KEEP_WITH_TEAM` | on changing team: `KEEP_WITH_TEAM`, `COPY_TO_NEW_TEAM` (into a team with no progress) or `MERGE`; `team_change` in `data.snbt` wins |
 | `tasks.itemScanInterval` | 10 | ticks between inventory checks for item tasks |
 | `announcements.chapterCompletion` | false | announce completed chapters in chat |
+| `emergency.cooldown` | 300 | seconds between uses of `emergency`; `emergency_cooldown` in `data.snbt` wins |
 | `editor.permissionLevel` | 2 | the op level that may edit the book in game (the `hibiscusquests.editor` node's default) |
 | `rewards.lootCrateDrops` | true | mobs drop reward tables' loot crates (`drop_loot_crates` in `data.snbt` can also turn it off) |
 | `book.maxPinnedQuests` | 5 | how many quests a player can pin |

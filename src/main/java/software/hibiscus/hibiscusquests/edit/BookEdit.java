@@ -19,7 +19,7 @@ import net.minecraft.network.codec.StreamCodec;
 // One change to the pack's book files, as the editor sends it. Each puts one object in its file form (as the chapter
 // files write it), or takes it away when the value is empty: a quest or quest link of a chapter, a chapter's images or
 // labels (they have no ids, so the whole list goes), a chapter's own fields (empty deletes the chapter), the chapter
-// groups, the book settings or a reward table. Override copies a mod's chapter into the pack's files. The server
+// groups, the book settings, a reward table or one translation. Override copies a mod's chapter into the pack's files. The server
 // checks every edit (BookEditor), so a client can't write anything the files couldn't hold.
 public sealed interface BookEdit {
     record Quest(String chapter, String id, Optional<CompoundTag> value) implements BookEdit {}
@@ -40,6 +40,9 @@ public sealed interface BookEdit {
 
     record Override(String chapter) implements BookEdit {}
 
+    // A translation in the pack's lang/<locale>.snbt: set, or removed when empty.
+    record Lang(String locale, String key, Optional<String> text) implements BookEdit {}
+
     // What the edit touches, for messages and patches: "chapter <id>", "groups", "settings" or "table <id>".
     default String target() {
         return switch (this) {
@@ -52,6 +55,7 @@ public sealed interface BookEdit {
             case Groups _ -> "groups";
             case Settings _ -> "settings";
             case Table edit -> "table " + edit.id();
+            case Lang edit -> "lang " + edit.locale();
         };
     }
 
@@ -105,6 +109,12 @@ public sealed interface BookEdit {
                 buf.writeByte(8);
                 buf.writeUtf(e.chapter());
             }
+            case Lang e -> {
+                buf.writeByte(9);
+                buf.writeUtf(e.locale());
+                buf.writeUtf(e.key());
+                buf.writeOptional(e.text(), FriendlyByteBuf::writeUtf);
+            }
         }
     }
 
@@ -120,6 +130,7 @@ public sealed interface BookEdit {
             case 6 -> new Settings(ByteBufCodecs.TRUSTED_COMPOUND_TAG.decode(buf));
             case 7 -> new Table(buf.readUtf(), OPTIONAL_TAG.decode(buf));
             case 8 -> new Override(buf.readUtf());
+            case 9 -> new Lang(buf.readUtf(), buf.readUtf(), buf.readOptional(FriendlyByteBuf::readUtf));
             default -> throw new IllegalArgumentException("Unknown book edit " + kind);
         };
     }

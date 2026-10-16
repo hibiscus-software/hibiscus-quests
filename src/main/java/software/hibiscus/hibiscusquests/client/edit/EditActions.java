@@ -40,6 +40,7 @@ import software.hibiscus.hibiscusquests.book.Quest;
 import software.hibiscus.hibiscusquests.book.QuestBook;
 import software.hibiscus.hibiscusquests.book.RewardTable;
 import software.hibiscus.hibiscusquests.client.ClientBook;
+import software.hibiscus.hibiscusquests.client.ClientLang;
 import software.hibiscus.hibiscusquests.edit.BookEdit;
 import software.hibiscus.hibiscusquests.edit.Ids;
 
@@ -86,8 +87,38 @@ public final class EditActions {
         }
 
         void submit(String action) {
+            // Translations a form changed go in the same change (see withLang).
+            forward.addAll(PENDING_LANG);
+            back.addAll(0, PENDING_LANG_BACK);
+            PENDING_LANG.clear();
+            PENDING_LANG_BACK.clear();
             ClientEditor.submit(Component.translatable("hibiscusquests.edit.action." + action), forward, back);
         }
+    }
+
+    // Translations to send with the next change: a form that edits translated text saves through withLang.
+    private static final List<BookEdit> PENDING_LANG = new ArrayList<>();
+    private static final List<BookEdit> PENDING_LANG_BACK = new ArrayList<>();
+
+    // Saves an object together with the translations its form changed (key to text, in the locale the editor shows),
+    // as one undoable change. A save that doesn't edit anything else still sends them.
+    public static void withLang(Map<String, String> changes, Runnable save) {
+        String locale = ClientLang.locale();
+        PENDING_LANG.clear();
+        PENDING_LANG_BACK.clear();
+        changes.forEach((key, text) -> {
+            PENDING_LANG.add(new BookEdit.Lang(locale, key, text.isEmpty() ? Optional.empty() : Optional.of(text)));
+            PENDING_LANG_BACK.add(new BookEdit.Lang(locale, key, book().translation(locale, key)));
+        });
+        save.run();
+        if (!PENDING_LANG.isEmpty()) {
+            new Change().submit("translation");
+        }
+    }
+
+    // Whether a key is one of the pack's translations (in any locale).
+    public static boolean isPackKey(String key) {
+        return book().lang().values().stream().anyMatch(entries -> entries.containsKey(key));
     }
 
     private EditActions() {}

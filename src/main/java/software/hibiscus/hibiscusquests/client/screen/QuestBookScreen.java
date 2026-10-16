@@ -493,7 +493,7 @@ public final class QuestBookScreen extends BaseScreen {
         if (contains(BookText.component(quest.title()).getString(), text) || contains(BookText.component(quest.display().subtitle()).getString(), text)) {
             return true;
         }
-        for (String line : quest.display().description()) {
+        for (String line : BookText.lines(quest.display().description())) {
             if (contains(line, text)) {
                 return true;
             }

@@ -6,6 +6,8 @@
 
 package software.hibiscus.hibiscusquests.command;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -28,6 +30,7 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.PermissionLevel;
+import net.minecraft.util.Prediction;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.BlockHitResult;
@@ -35,10 +38,15 @@ import net.minecraft.world.phys.HitResult;
 import software.hibiscus.hibiscuslib.api.team.Team;
 import software.hibiscus.hibiscuslib.util.PermissionLevels;
 import software.hibiscus.hibiscuslib.util.Profiles;
+import software.hibiscus.hibiscusquests.QuestItems;
 import software.hibiscus.hibiscusquests.api.QuestRef;
 import software.hibiscus.hibiscusquests.book.BookManager;
+import software.hibiscus.hibiscusquests.book.BookSettings;
 import software.hibiscus.hibiscusquests.book.BookText;
 import software.hibiscus.hibiscusquests.book.Chapter;
+import software.hibiscus.hibiscusquests.book.ChapterExport;
+import software.hibiscus.hibiscusquests.book.PackArchive;
+import software.hibiscus.hibiscusquests.book.PackFiles;
 import software.hibiscus.hibiscusquests.book.ProgressMode;
 import software.hibiscus.hibiscusquests.book.Quest;
 import software.hibiscus.hibiscusquests.book.QuestBook;
@@ -48,6 +56,7 @@ import software.hibiscus.hibiscusquests.edit.BookEditor;
 import software.hibiscus.hibiscusquests.edit.ChapterGenerator;
 import software.hibiscus.hibiscusquests.edit.EditingMode;
 import software.hibiscus.hibiscusquests.edit.Ids;
+import software.hibiscus.hibiscusquests.edit.LangExport;
 import software.hibiscus.hibiscusquests.network.QuestSync;
 import software.hibiscus.hibiscusquests.progress.ProgressManager;
 import software.hibiscus.hibiscusquests.progress.QuestClock;
@@ -57,8 +66,9 @@ import software.hibiscus.hibiscusquests.progress.TeamProgress;
 import software.hibiscus.hibiscusquests.task.CriterionTask;
 import org.jspecify.annotations.Nullable;
 
-// /hibiscusquests (alias /hquests). Players: open [quest], pin <quest> and claim_all. Ops (hibiscusquests.admin.* nodes): reload,
-// change_progress and debug; editors (hibiscusquests.editor): editing_mode and generate_chapter. Player and team arguments take online or offline players by name (through Hibiscus
+// /hibiscusquests (alias /hquests). Players: open [quest], pin <quest>, claim_all, emergency and locale [locale]. Ops
+// (hibiscusquests.admin.* nodes): reload, change_progress, debug, export, export_chapter, import and cleanup; editors
+// (hibiscusquests.editor): editing_mode, generate_chapter and export_lang. Player and team arguments take online or offline players by name (through Hibiscus
 // Lib's Profiles), a team's short name, or a team id.
 public final class QuestsCommand {
     private static final SuggestionProvider<CommandSourceStack> QUESTS = (context, builder) -> {
@@ -78,6 +88,15 @@ public final class QuestsCommand {
             options.add(quest.ref().toString());
         }
         return SharedSuggestionProvider.suggest(options, builder);
+    };
+    private static final SuggestionProvider<CommandSourceStack> CHAPTERS = (context, builder) -> SharedSuggestionProvider.suggest(
+            BookManager.book().chapters().stream().map(Chapter::id).toList(), builder);
+    private static final SuggestionProvider<CommandSourceStack> ZIPS = (context, builder) -> SharedSuggestionProvider.suggest(
+            PackArchive.zips(context.getSource().getServer()), builder);
+    private static final SuggestionProvider<CommandSourceStack> LOCALES = (context, builder) -> {
+        List<String> options = new ArrayList<>(BookManager.book().lang().keySet());
+        options.addAll(List.of("en_us", "de_de", "es_es", "fr_fr", "ja_jp", "pt_br", "ru_ru", "zh_cn"));
+        return SharedSuggestionProvider.suggest(options.stream().distinct().toList(), builder);
     };
     private static final SuggestionProvider<CommandSourceStack> TARGETS = (context, builder) -> {
         List<String> options = new ArrayList<>(List.of(context.getSource().getServer().getPlayerNames()));
@@ -135,7 +154,34 @@ public final class QuestsCommand {
                 .then(Commands.literal("generate_chapter")
                         .requires(PermissionLevels.requires(QuestPermissions.EDITOR, PermissionLevel.GAMEMASTERS))
                         .then(Commands.argument("title", StringArgumentType.greedyString())
-                                .executes(QuestsCommand::generateChapter)));
+                                .executes(QuestsCommand::generateChapter)))
+                .then(Commands.literal("export_lang")
+                        .requires(PermissionLevels.requires(QuestPermissions.EDITOR, PermissionLevel.GAMEMASTERS))
+                        .then(Commands.argument("locale", StringArgumentType.word()).suggests(LOCALES)
+                                .executes(QuestsCommand::exportLang)))
+                .then(Commands.literal("export")
+                        .requires(PermissionLevels.requires(QuestPermissions.EXPORT, PermissionLevel.GAMEMASTERS))
+                        .executes(QuestsCommand::export))
+                .then(Commands.literal("export_chapter")
+                        .requires(PermissionLevels.requires(QuestPermissions.EXPORT, PermissionLevel.GAMEMASTERS))
+                        .then(Commands.argument("chapter", StringArgumentType.word()).suggests(CHAPTERS)
+                                .then(Commands.argument("namespace", StringArgumentType.word())
+                                        .executes(QuestsCommand::exportChapter))))
+                .then(Commands.literal("import")
+                        .requires(PermissionLevels.requires(QuestPermissions.IMPORT, PermissionLevel.GAMEMASTERS))
+                        .then(Commands.argument("file", StringArgumentType.greedyString()).suggests(ZIPS)
+                                .executes(QuestsCommand::importZip)))
+                .then(Commands.literal("cleanup")
+                        .requires(PermissionLevels.requires(QuestPermissions.CLEANUP, PermissionLevel.GAMEMASTERS))
+                        .executes(context -> cleanup(context, false))
+                        .then(Commands.literal("confirm")
+                                .executes(context -> cleanup(context, true))))
+                .then(Commands.literal("emergency")
+                        .executes(QuestsCommand::emergency))
+                .then(Commands.literal("locale")
+                        .executes(context -> locale(context, ""))
+                        .then(Commands.argument("locale", StringArgumentType.word()).suggests(LOCALES)
+                                .executes(context -> locale(context, StringArgumentType.getString(context, "locale")))));
     }
 
     // Turns edit mode on or off (or over, with no argument) for the player running it or another one. Putting someone
@@ -187,6 +233,136 @@ public final class QuestsCommand {
             return 0;
         }
         context.getSource().sendSuccess(() -> Component.translatable("hibiscusquests.command.generate.done", chapterId, stacks.size()), true);
+        return 1;
+    }
+
+    // Moves the pack's literal text to lang/<locale>.snbt (and the default locale's), keys in its place.
+    private static int exportLang(CommandContext<CommandSourceStack> context) {
+        String locale = StringArgumentType.getString(context, "locale");
+        if (!PackFiles.isLocale(locale)) {
+            context.getSource().sendFailure(Component.translatable("hibiscusquests.command.lang.bad_locale", locale));
+            return 0;
+        }
+        MinecraftServer server = context.getSource().getServer();
+        LangExport.Result export = LangExport.edits(server, locale);
+        if (export.edits().isEmpty()) {
+            context.getSource().sendSuccess(() -> Component.translatable("hibiscusquests.command.lang.nothing", locale), false);
+            return 1;
+        }
+        BookEditor.Result result = BookEditor.apply(server, export.edits());
+        if (!result.ok()) {
+            result.messages().forEach(message -> context.getSource().sendFailure(message));
+            return 0;
+        }
+        context.getSource().sendSuccess(() -> Component.translatable("hibiscusquests.command.lang.done", export.texts(),
+                PackFiles.LANG + "/" + locale + ".snbt"), true);
+        return 1;
+    }
+
+    private static int export(CommandContext<CommandSourceStack> context) {
+        MinecraftServer server = context.getSource().getServer();
+        try {
+            Path zip = PackArchive.export(server, "book");
+            context.getSource().sendSuccess(() -> Component.translatable("hibiscusquests.command.export.done",
+                    PackArchive.EXPORTS + "/" + zip.getFileName()), true);
+            return 1;
+        } catch (IOException e) {
+            context.getSource().sendFailure(Component.translatable("hibiscusquests.command.export.failed", String.valueOf(e.getMessage())));
+            return 0;
+        }
+    }
+
+    private static int exportChapter(CommandContext<CommandSourceStack> context) {
+        String chapter = StringArgumentType.getString(context, "chapter");
+        String namespace = StringArgumentType.getString(context, "namespace");
+        if (!namespace.matches("[a-z0-9_.-]+")) {
+            context.getSource().sendFailure(Component.translatable("hibiscusquests.command.export_chapter.bad_namespace", namespace));
+            return 0;
+        }
+        if (BookManager.book().sourceChapter(chapter).isEmpty()) {
+            context.getSource().sendFailure(Component.translatable("hibiscusquests.edit.error.no_chapter", chapter));
+            return 0;
+        }
+        try {
+            ChapterExport.Result result = ChapterExport.export(context.getSource().getServer(), chapter, namespace);
+            context.getSource().sendSuccess(() -> Component.translatable("hibiscusquests.command.export_chapter.done", chapter,
+                    PackArchive.EXPORTS, result.files().size()), true);
+            result.files().forEach(file -> context.getSource().sendSuccess(() -> Component.literal("  " + file).withStyle(ChatFormatting.GRAY), false));
+            if (!chapter.startsWith(namespace + "_") && !chapter.equals(namespace)) {
+                context.getSource().sendSuccess(() -> Component.translatable("hibiscusquests.command.export_chapter.prefix", namespace)
+                        .withStyle(ChatFormatting.GOLD), false);
+            }
+            return 1;
+        } catch (IOException e) {
+            context.getSource().sendFailure(Component.translatable("hibiscusquests.command.export.failed", String.valueOf(e.getMessage())));
+            return 0;
+        }
+    }
+
+    private static int importZip(CommandContext<CommandSourceStack> context) {
+        String name = StringArgumentType.getString(context, "file").strip();
+        try {
+            PackArchive.ImportResult result = PackArchive.importZip(context.getSource().getServer(), name);
+            if (!result.problems().isEmpty()) {
+                context.getSource().sendFailure(Component.translatable("hibiscusquests.command.import.refused", name));
+                result.problems().stream().limit(10).forEach(problem -> context.getSource().sendFailure(Component.literal("  " + problem)));
+                return 0;
+            }
+            context.getSource().sendSuccess(() -> Component.translatable("hibiscusquests.command.import.done", result.files(), name,
+                    PackArchive.EXPORTS + "/" + result.backup().getFileName()), true);
+            return 1;
+        } catch (IOException e) {
+            context.getSource().sendFailure(Component.translatable("hibiscusquests.command.import.failed", String.valueOf(e.getMessage())));
+            return 0;
+        }
+    }
+
+    // Counts (or, with confirm, drops) progress for quests no longer in the book.
+    private static int cleanup(CommandContext<CommandSourceStack> context, boolean apply) {
+        ProgressManager.CleanupReport report = ProgressManager.cleanup(apply);
+        if (report.quests() == 0) {
+            context.getSource().sendSuccess(() -> Component.translatable("hibiscusquests.command.cleanup.nothing", report.teams()), false);
+            return 1;
+        }
+        String key = apply ? "hibiscusquests.command.cleanup.done" : "hibiscusquests.command.cleanup.dry_run";
+        context.getSource().sendSuccess(() -> Component.translatable(key, report.quests(), report.teamsChanged(), report.teams()), apply);
+        return 1;
+    }
+
+    // The book's emergency items (a fresh start for someone who lost everything), once per cooldown.
+    private static int emergency(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        BookSettings settings = BookManager.book().settings();
+        if (settings.emergencyItems().isEmpty()) {
+            context.getSource().sendFailure(Component.translatable("hibiscusquests.command.emergency.none"));
+            return 0;
+        }
+        long cooldown = settings.emergencyCooldown().orElseGet(() -> QuestsConfig.get(QuestsConfig.EMERGENCY_COOLDOWN)) * 1000L;
+        long now = System.currentTimeMillis();
+        long last = player.getData(QuestItems.EMERGENCY_USED);
+        if (last > 0 && now - last < cooldown) {
+            long seconds = (cooldown - (now - last) + 999) / 1000;
+            context.getSource().sendFailure(Component.translatable("hibiscusquests.command.emergency.wait", seconds));
+            return 0;
+        }
+        player.setData(QuestItems.EMERGENCY_USED, now);
+        for (ItemStack stack : settings.emergencyItems()) {
+            player.getInventory().placeItemBackInInventory(stack.copy(), Prediction.SERVER_ONLY);
+        }
+        context.getSource().sendSuccess(() -> Component.translatable("hibiscusquests.command.emergency.given"), false);
+        return 1;
+    }
+
+    // Shows the player's book in another locale ("" goes back to their own language).
+    private static int locale(CommandContext<CommandSourceStack> context, String locale) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        if (!locale.isEmpty() && !PackFiles.isLocale(locale)) {
+            context.getSource().sendFailure(Component.translatable("hibiscusquests.command.lang.bad_locale", locale));
+            return 0;
+        }
+        QuestSync.previewLocale(player, locale);
+        context.getSource().sendSuccess(() -> locale.isEmpty() ? Component.translatable("hibiscusquests.command.locale.reset")
+                : Component.translatable("hibiscusquests.command.locale.preview", locale), false);
         return 1;
     }
 

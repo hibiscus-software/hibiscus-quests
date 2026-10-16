@@ -13,8 +13,10 @@ import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -37,12 +39,14 @@ import org.jspecify.annotations.Nullable;
 //     chapter_groups.snbt             {groups: [...]}
 //     chapters/<chapter_id>.snbt      one chapter each
 //     reward_tables/<table_id>.snbt   one reward table each
+//     lang/<locale>.snbt              the pack's translations: {"some.key": "Text", ...}
 // Files are SNBT, written by Hibiscus Lib's SnbtFiles (sorted keys, atomic, with a .bak).
 public final class PackFiles {
     public static final String SETTINGS = "data.snbt";
     public static final String GROUPS = "chapter_groups.snbt";
     public static final String CHAPTERS = "chapters";
     public static final String TABLES = "reward_tables";
+    public static final String LANG = "lang";
     // Where deleted chapters and tables go (the editor never deletes a file outright).
     public static final String TRASH = ".trash";
     private static final String SUFFIX = ".snbt";
@@ -63,7 +67,34 @@ public final class PackFiles {
                 .ifPresent(tag -> groups.add(new RawFile(GROUPS, Optional.empty(), tag, display(directory, GROUPS))));
         List<RawFile> chapters = readDirectory(directory, CHAPTERS, warnings);
         List<RawFile> tables = readDirectory(directory, TABLES, warnings);
-        return new BookSources(settings, groups, chapters, List.of(), tables, List.of());
+        return new BookSources(settings, groups, chapters, List.of(), tables, List.of(), readLang(directory, warnings));
+    }
+
+    // The pack's translations, lang/<locale>.snbt, by locale (the file name).
+    private static Map<String, CompoundTag> readLang(Path directory, Consumer<String> warnings) {
+        Map<String, CompoundTag> lang = new LinkedHashMap<>();
+        Path dir = directory.resolve(LANG);
+        if (Files.isDirectory(dir)) {
+            try (Stream<Path> files = Files.list(dir)) {
+                for (Path file : files.filter(path -> path.getFileName().toString().endsWith(SUFFIX)).sorted().toList()) {
+                    String name = file.getFileName().toString();
+                    String locale = name.substring(0, name.length() - SUFFIX.length());
+                    if (!isLocale(locale)) {
+                        warnings.accept(display(directory, LANG + "/" + name) + ": \"" + locale + "\" isn't a locale (en_us, de_de...)");
+                        continue;
+                    }
+                    readFile(file, warnings).ifPresent(tag -> lang.put(locale, tag));
+                }
+            } catch (IOException e) {
+                warnings.accept("Couldn't list " + dir + ": " + e.getMessage());
+            }
+        }
+        return lang;
+    }
+
+    // A locale as Minecraft names them: en_us, de_de, zh_cn...
+    public static boolean isLocale(String locale) {
+        return locale.matches("[a-z]{2,3}(_[a-z0-9]{2,8})?");
     }
 
     // Every .snbt file in a subdirectory, by name; ids come from the files' id fields, else their names.
@@ -151,6 +182,19 @@ public final class PackFiles {
 
     public static void trashTable(Path directory, String id) throws IOException {
         trashById(directory, TABLES, id, null);
+    }
+
+    public static void writeLangTag(Path directory, String locale, CompoundTag tag) throws IOException {
+        SnbtFiles.write(directory.resolve(LANG).resolve(locale + SUFFIX), tag);
+    }
+
+    public static void trashLang(Path directory, String locale) throws IOException {
+        Path file = directory.resolve(LANG).resolve(locale + SUFFIX);
+        if (Files.exists(file)) {
+            Path trash = directory.resolve(TRASH).resolve(LANG);
+            Files.createDirectories(trash);
+            Files.move(file, trash.resolve(TRASH_STAMP.format(LocalDateTime.now()) + "-" + file.getFileName()), StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     public static void writeSettingsTag(Path directory, CompoundTag tag) throws IOException {

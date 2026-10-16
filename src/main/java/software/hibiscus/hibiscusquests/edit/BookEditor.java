@@ -31,6 +31,7 @@ import software.hibiscus.hibiscusquests.api.QuestRef;
 import software.hibiscus.hibiscusquests.book.BookManager;
 import software.hibiscus.hibiscusquests.book.BookSettings;
 import software.hibiscus.hibiscusquests.book.BookSources.PackChange;
+import software.hibiscus.hibiscusquests.book.BookSources;
 import software.hibiscus.hibiscusquests.book.CanvasElements.CanvasImage;
 import software.hibiscus.hibiscusquests.book.CanvasElements.CanvasLabel;
 import software.hibiscus.hibiscusquests.book.CanvasElements.QuestLink;
@@ -73,6 +74,8 @@ public final class BookEditor {
         private final Map<String, Optional<RewardTable>> tables = new LinkedHashMap<>();
         private Optional<List<ChapterGroup>> groups = Optional.empty();
         private Optional<BookSettings> settings = Optional.empty();
+        // The pack's translation files the batch changed, by locale (copies of the files' tags).
+        private final Map<String, CompoundTag> lang = new LinkedHashMap<>();
 
         Working(QuestBook book) {
             this.book = book;
@@ -93,6 +96,10 @@ public final class BookEditor {
 
         Optional<RewardTable> table(String id) {
             return tables.containsKey(id) ? tables.get(id) : book.table(id);
+        }
+
+        CompoundTag lang(String locale, BookSources sources) {
+            return lang.computeIfAbsent(locale, key -> sources.packLang().getOrDefault(key, new CompoundTag()).copy());
         }
     }
 
@@ -127,6 +134,7 @@ public final class BookEditor {
         Map<String, Optional<CompoundTag>> tableTags = new LinkedHashMap<>();
         Optional<CompoundTag> groupsTag = Optional.empty();
         Optional<CompoundTag> settingsTag = Optional.empty();
+        Map<String, Optional<CompoundTag>> langTags = new LinkedHashMap<>();
         try {
             for (Map.Entry<String, Optional<Chapter>> entry : working.chapters.entrySet()) {
                 chapterTags.put(entry.getKey(), entry.getValue().map(chapter -> PackFiles.encode(chapter, ops)));
@@ -140,6 +148,7 @@ public final class BookEditor {
             if (working.settings.isPresent()) {
                 settingsTag = Optional.of((CompoundTag) BookSettings.CODEC.encodeStart(ops, working.settings.get()).getOrThrow());
             }
+            working.lang.forEach((locale, tag) -> langTags.put(locale, tag.isEmpty() ? Optional.empty() : Optional.of(tag)));
         } catch (RuntimeException e) {
             HibiscusQuests.LOGGER.error("Couldn't encode an edit to the quest book", e);
             return Result.failed(Component.translatable("hibiscusquests.edit.error.encode", String.valueOf(e.getMessage())));
@@ -168,12 +177,19 @@ public final class BookEditor {
             if (settingsTag.isPresent()) {
                 PackFiles.writeSettingsTag(directory, settingsTag.get());
             }
+            for (Map.Entry<String, Optional<CompoundTag>> entry : langTags.entrySet()) {
+                if (entry.getValue().isPresent()) {
+                    PackFiles.writeLangTag(directory, entry.getKey(), entry.getValue().get());
+                } else {
+                    PackFiles.trashLang(directory, entry.getKey());
+                }
+            }
         } catch (IOException e) {
             HibiscusQuests.LOGGER.error("Couldn't write the quest book's files", e);
             return Result.failed(Component.translatable("hibiscusquests.edit.error.write", String.valueOf(e.getMessage())));
         }
 
-        List<String> warnings = BookManager.onPackEdited(server, new PackChange(chapterTags, groupsTag, settingsTag, tableTags));
+        List<String> warnings = BookManager.onPackEdited(server, new PackChange(chapterTags, groupsTag, settingsTag, tableTags, langTags));
         return new Result(true, warnings.stream().map(warning -> (Component) Component.literal(warning)).toList());
     }
 
@@ -277,6 +293,20 @@ public final class BookEditor {
                         throw new Refused(Component.translatable("hibiscusquests.edit.error.no_table", e.id()));
                     }
                     working.tables.put(e.id(), Optional.empty());
+                }
+            }
+            case BookEdit.Lang e -> {
+                if (!PackFiles.isLocale(e.locale())) {
+                    throw new Refused(Component.translatable("hibiscusquests.edit.error.bad_locale", e.locale()));
+                }
+                if (!e.key().matches("[a-z0-9_.-]+")) {
+                    throw new Refused(Component.translatable("hibiscusquests.edit.error.bad_key", e.key()));
+                }
+                CompoundTag lang = working.lang(e.locale(), BookManager.packSources());
+                if (e.text().isPresent()) {
+                    lang.putString(e.key(), e.text().get());
+                } else {
+                    lang.remove(e.key());
                 }
             }
             case BookEdit.Override e -> {

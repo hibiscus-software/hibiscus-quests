@@ -7,6 +7,7 @@
 package software.hibiscus.hibiscusquests.network;
 
 import software.hibiscus.hibiscusquests.api.QuestRef;
+import software.hibiscus.hibiscusquests.client.ClientLang;
 import software.hibiscus.hibiscusquests.client.ClientQuestState;
 import software.hibiscus.hibiscusquests.client.edit.ClientEditor;
 import software.hibiscus.hibiscusquests.client.screen.QuestBookScreen;
@@ -46,6 +47,10 @@ final class ClientBridge {
 
     static void registryList(QuestPayloads.RegistryList payload) {
         ClientEditor.onRegistryList(payload.registry(), payload.ids(), payload.tags());
+    }
+
+    static void previewLocale(QuestPayloads.PreviewLocale payload) {
+        ClientLang.setPreview(payload.locale());
     }
 
     static void openBook(QuestPayloads.OpenBook payload) {

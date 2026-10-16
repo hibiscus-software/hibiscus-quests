@@ -16,10 +16,11 @@ import java.util.Optional;
 import net.minecraft.nbt.CompoundTag;
 
 // The book's files before merging, as raw tags: the pack's own (config/hibiscusquests/, editable) and the ones mods and
-// data packs ship under data/<namespace>/hibiscusquests/ (read-only defaults).
+// data packs ship under data/<namespace>/hibiscusquests/ (read-only defaults). packLang is the pack's translations,
+// lang/<locale>.snbt, by locale.
 public record BookSources(Optional<CompoundTag> settings, List<RawFile> groupFiles, List<RawFile> packChapters,
-        List<RawFile> modChapters, List<RawFile> packTables, List<RawFile> modTables) {
-    public static final BookSources EMPTY = new BookSources(Optional.empty(), List.of(), List.of(), List.of(), List.of(), List.of());
+        List<RawFile> modChapters, List<RawFile> packTables, List<RawFile> modTables, Map<String, CompoundTag> packLang) {
+    public static final BookSources EMPTY = new BookSources(Optional.empty(), List.of(), List.of(), List.of(), List.of(), List.of(), Map.of());
 
     public BookSources {
         groupFiles = List.copyOf(groupFiles);
@@ -27,19 +28,20 @@ public record BookSources(Optional<CompoundTag> settings, List<RawFile> groupFil
         modChapters = List.copyOf(modChapters);
         packTables = List.copyOf(packTables);
         modTables = List.copyOf(modTables);
+        packLang = Collections.unmodifiableMap(new LinkedHashMap<>(packLang));
     }
 
     // Chapters only (tests and simple callers).
     public BookSources(Optional<CompoundTag> settings, List<RawFile> groupFiles, List<RawFile> packChapters, List<RawFile> modChapters) {
-        this(settings, groupFiles, packChapters, modChapters, List.of(), List.of());
+        this(settings, groupFiles, packChapters, modChapters, List.of(), List.of(), Map.of());
     }
 
     // One file: id is the chapter id (the file's id field, else its name), source the namespace that shipped it (empty
     // for the pack), origin where it came from, for messages.
     public record RawFile(String id, Optional<String> source, CompoundTag tag, String origin) {}
 
-    // The pack's files after an edit: chapters and tables replaced by id (or removed when empty), and the settings and
-    // groups files replaced when given.
+    // The pack's files after an edit: chapters, tables and translations replaced by id or locale (or removed when
+    // empty), and the settings and groups files replaced when given.
     public BookSources withPackChange(PackChange change) {
         List<RawFile> chapters = replaceById(packChapters, change.chapters(), PackFiles.CHAPTERS);
         List<RawFile> tables = replaceById(packTables, change.tables(), PackFiles.TABLES);
@@ -49,7 +51,15 @@ public record BookSources(Optional<CompoundTag> settings, List<RawFile> groupFil
             groups.add(new RawFile(PackFiles.GROUPS, Optional.empty(), change.groups().get(), PackFiles.GROUPS));
         }
         Optional<CompoundTag> newSettings = change.settings().isPresent() ? change.settings() : settings;
-        return new BookSources(newSettings, groups, chapters, modChapters, tables, modTables);
+        Map<String, CompoundTag> lang = new LinkedHashMap<>(packLang);
+        change.lang().forEach((locale, tag) -> {
+            if (tag.isPresent()) {
+                lang.put(locale, tag.get());
+            } else {
+                lang.remove(locale);
+            }
+        });
+        return new BookSources(newSettings, groups, chapters, modChapters, tables, modTables, lang);
     }
 
     private static List<RawFile> replaceById(List<RawFile> files, Map<String, Optional<CompoundTag>> changes, String directory) {
@@ -63,19 +73,25 @@ public record BookSources(Optional<CompoundTag> settings, List<RawFile> groupFil
         return result;
     }
 
-    // What an edit changed in the pack's files, as the files' tags: by chapter and table id (empty: removed), and the
-    // groups and settings files when they changed.
+    // What an edit changed in the pack's files, as the files' tags: by chapter and table id and by locale (empty:
+    // removed), and the groups and settings files when they changed.
     public record PackChange(Map<String, Optional<CompoundTag>> chapters, Optional<CompoundTag> groups,
-            Optional<CompoundTag> settings, Map<String, Optional<CompoundTag>> tables) {
+            Optional<CompoundTag> settings, Map<String, Optional<CompoundTag>> tables, Map<String, Optional<CompoundTag>> lang) {
         public PackChange {
             chapters = Collections.unmodifiableMap(new LinkedHashMap<>(chapters));
             tables = Collections.unmodifiableMap(new LinkedHashMap<>(tables));
+            lang = Collections.unmodifiableMap(new LinkedHashMap<>(lang));
+        }
+
+        public PackChange(Map<String, Optional<CompoundTag>> chapters, Optional<CompoundTag> groups, Optional<CompoundTag> settings,
+                Map<String, Optional<CompoundTag>> tables) {
+            this(chapters, groups, settings, tables, Map.of());
         }
     }
 
     public BookSources withModFiles(List<RawFile> chapters, List<RawFile> modGroups, List<RawFile> tables) {
         List<RawFile> groups = new ArrayList<>(groupFiles.stream().filter(file -> file.source().isEmpty()).toList());
         groups.addAll(modGroups);
-        return new BookSources(settings, groups, packChapters, chapters, packTables, tables);
+        return new BookSources(settings, groups, packChapters, chapters, packTables, tables, packLang);
     }
 }

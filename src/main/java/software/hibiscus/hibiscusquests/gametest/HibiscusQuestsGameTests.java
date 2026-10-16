@@ -111,6 +111,11 @@ public final class HibiscusQuestsGameTests {
         add(EDITOR_TESTS, "editor_tables_groups_settings", EditorGameTests::tablesGroupsSettings);
         add(EDITOR_TESTS, "editor_permission", EditorGameTests::permission);
         add(EDITOR_TESTS, "editor_generate_chapter", EditorGameTests::generate);
+        add(EDITOR_TESTS, "pack_lang", PackGameTests::lang);
+        add(EDITOR_TESTS, "pack_export_import", PackGameTests::exportImport);
+        add(EDITOR_TESTS, "pack_export_chapter", PackGameTests::exportChapter);
+        add(EDITOR_TESTS, "progress_cleanup", PackGameTests::cleanup);
+        add(EDITOR_TESTS, "emergency_items", PackGameTests::emergency);
         TESTS.forEach((name, test) -> FUNCTIONS.register(name, () -> test));
         EDITOR_TESTS.forEach((name, test) -> FUNCTIONS.register(name, () -> test));
     }

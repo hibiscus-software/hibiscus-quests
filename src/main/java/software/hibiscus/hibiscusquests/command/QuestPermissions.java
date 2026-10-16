@@ -25,6 +25,12 @@ public final class QuestPermissions {
     public static final PermissionNode<Boolean> CHANGE_PROGRESS = node("admin.change_progress");
     // debug: why a quest is locked or incomplete.
     public static final PermissionNode<Boolean> DEBUG = node("admin.debug");
+    // export, export_chapter: the pack's book as a zip, or a chapter as a mod's data files.
+    public static final PermissionNode<Boolean> EXPORT = node("admin.export");
+    // import: replace the pack's book with a zip.
+    public static final PermissionNode<Boolean> IMPORT = node("admin.import");
+    // cleanup: drop progress for quests no longer in the book.
+    public static final PermissionNode<Boolean> CLEANUP = node("admin.cleanup");
     // editor: edit mode in the book, editing_mode and generate_chapter. Its default level is the server config's
     // editor.permissionLevel (2, ops, unless changed), so it's declared here rather than through PermissionLevels.
     public static final PermissionNode<Boolean> EDITOR = new PermissionNode<>(HibiscusQuests.MODID, "editor", PermissionTypes.BOOLEAN,

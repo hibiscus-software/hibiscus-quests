@@ -108,6 +108,10 @@ public final class QuestSync {
         }
     }
 
+    public static void previewLocale(ServerPlayer player, String locale) {
+        send(player, new QuestPayloads.PreviewLocale(locale));
+    }
+
     public static void sendEditResult(ServerPlayer player, BookEditor.Result result) {
         send(player, new QuestPayloads.EditResult(result.ok(), result.messages().stream().limit(64).toList()));
     }
