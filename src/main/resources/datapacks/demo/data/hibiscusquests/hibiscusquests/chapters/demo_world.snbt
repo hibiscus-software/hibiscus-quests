@@ -1,7 +1,7 @@
 {
     id: "demo_world",
-    group: "demo",
-    order: 2,
+    group: "demo_outdoors",
+    order: 0,
     title: "Out in the World",
     subtitle: "Fight, travel, explore, and hand things in",
     icon: "minecraft:filled_map",

@@ -49,6 +49,7 @@ import software.hibiscus.hibiscusquests.api.event.QuestBookOpenEvent;
 import software.hibiscus.hibiscusquests.book.BookText;
 import software.hibiscus.hibiscusquests.book.Chapter;
 import software.hibiscus.hibiscusquests.book.ChapterGroup;
+import software.hibiscus.hibiscusquests.book.GroupTree;
 import software.hibiscus.hibiscusquests.book.Quest;
 import software.hibiscus.hibiscusquests.book.QuestBook;
 import software.hibiscus.hibiscusquests.book.QuestTask;
@@ -88,6 +89,8 @@ public final class QuestBookScreen extends BaseScreen {
     private final EditorMenus menus;
     // What's being dragged in the list (edit mode: a chapter or group), and where the mouse is.
     private @Nullable Component draggingLabel;
+    // The group whose heading is being dragged, if it's one.
+    private @Nullable String draggingGroup;
     private double dragX;
     private double dragY;
     private @Nullable ScrollPanel list;
@@ -237,7 +240,7 @@ public final class QuestBookScreen extends BaseScreen {
             addRenderableWidget(new IconButton(listX, buttonY, 20, Icon.sprite(QuestDraw.ADD), Component.translatable("hibiscusquests.edit.new_chapter"),
                     button -> menus.newChapter("")));
             addRenderableWidget(new IconButton(listX + step, buttonY, 20, Icon.sprite(QuestDraw.PANEL_EXPAND),
-                    Component.translatable("hibiscusquests.edit.new_group"), button -> menus.newGroup()));
+                    Component.translatable("hibiscusquests.edit.new_group"), button -> menus.newGroup("")));
             addRenderableWidget(new IconButton(listX + step * 2, buttonY, 20, Icon.sprite(QuestDraw.TABLE),
                     Component.translatable("hibiscusquests.edit.tables"), button -> menus.tables()));
             addRenderableWidget(new IconButton(listX + step * 3, buttonY, 20, Icon.sprite(QuestDraw.SETTINGS),
@@ -323,59 +326,57 @@ public final class QuestBookScreen extends BaseScreen {
         refreshResults();
     }
 
+    // The list as a tree (GroupTree.rows): ungrouped chapters, then each group's heading with its chapters and the
+    // groups under it, a level further in. Collapsed, only the chapters show, in the same order, folded groups' too.
     private void fillList(ScrollPanel panel, @Nullable Chapter selected) {
         int width = panel.contentWidth();
         int y = 0;
-        QuestBook book = ClientBook.book();
-        List<Chapter> chapters = ClientBook.visibleChapters();
-        List<String> groupIds = book.groups().stream().map(ChapterGroup::id).toList();
-        // Ungrouped chapters first, then each group under its heading.
-        for (Chapter chapter : chapters) {
-            if (!groupIds.contains(chapter.info().group())) {
-                y = addRow(panel, chapter, selected, width, y);
-            }
-        }
-        for (ChapterGroup group : book.groups()) {
-            List<Chapter> inGroup = chapters.stream().filter(chapter -> chapter.info().group().equals(group.id())).toList();
-            if (inGroup.isEmpty() && !ClientEditor.isEditing()) {
-                continue;
-            }
-            boolean folded = BookUiState.isFolded(group.id(), group.collapsed());
-            if (!collapsed) {
-                ChapterRows.Editing editing = !ClientEditor.isEditing() ? null : new ChapterRows.Editing() {
-                    @Override
-                    public void menu(int mouseX, int mouseY) {
-                        menus.groupMenu(group, mouseX, mouseY);
+        GroupTree tree = ClientBook.book().groupTree();
+        List<GroupTree.Row> rows = tree.rows(ClientBook.visibleChapters(), ClientEditor.isEditing(),
+                group -> !collapsed && BookUiState.isFolded(group.id(), group.collapsed()));
+        for (GroupTree.Row row : rows) {
+            int indent = collapsed ? 0 : ChapterRows.indent(row.depth());
+            switch (row) {
+                case GroupTree.Row.Entry entry -> y = addRow(panel, entry.chapter(), selected, width, indent, y);
+                case GroupTree.Row.Heading heading -> {
+                    if (!collapsed) {
+                        addHeading(panel, heading.group(), heading.folded(), width, indent, y);
+                        y += ChapterRows.GROUP_HEIGHT;
                     }
-
-                    @Override
-                    public void dragging(double mouseX, double mouseY) {
-                        draggingLabel = BookText.titleOr(group.title(), group.id());
-                        dragX = mouseX;
-                        dragY = mouseY;
-                    }
-
-                    @Override
-                    public void dropped(double mouseX, double mouseY) {
-                        draggingLabel = null;
-                        dropGroup(group, mouseX, mouseY);
-                    }
-                };
-                panel.add(new ChapterRows.GroupRow(width, group, folded, () -> {
-                    BookUiState.setFolded(group.id(), !folded, group.collapsed());
-                    rebuildWidgets();
-                }, editing), 0, y);
-                y += ChapterRows.GROUP_HEIGHT;
-            }
-            if (!folded || collapsed) {
-                for (Chapter chapter : inGroup) {
-                    y = addRow(panel, chapter, selected, width, y);
                 }
             }
         }
     }
 
-    private int addRow(ScrollPanel panel, Chapter chapter, @Nullable Chapter selected, int width, int y) {
+    private void addHeading(ScrollPanel panel, ChapterGroup group, boolean folded, int width, int indent, int y) {
+        ChapterRows.Editing editing = !ClientEditor.isEditing() ? null : new ChapterRows.Editing() {
+            @Override
+            public void menu(int mouseX, int mouseY) {
+                menus.groupMenu(group, mouseX, mouseY);
+            }
+
+            @Override
+            public void dragging(double mouseX, double mouseY) {
+                draggingLabel = BookText.titleOr(group.title(), group.id());
+                draggingGroup = group.id();
+                dragX = mouseX;
+                dragY = mouseY;
+            }
+
+            @Override
+            public void dropped(double mouseX, double mouseY) {
+                draggingLabel = null;
+                draggingGroup = null;
+                dropGroup(group, mouseX, mouseY);
+            }
+        };
+        panel.add(new ChapterRows.GroupRow(width - indent, group, folded, () -> {
+            BookUiState.setFolded(group.id(), !folded, group.collapsed());
+            rebuildWidgets();
+        }, editing), indent, y);
+    }
+
+    private int addRow(ScrollPanel panel, Chapter chapter, @Nullable Chapter selected, int width, int indent, int y) {
         boolean isSelected = selected != null && selected.id().equals(chapter.id());
         ChapterRows.Editing editing = !ClientEditor.isEditing() ? null : new ChapterRows.Editing() {
             @Override
@@ -396,8 +397,9 @@ public final class QuestBookScreen extends BaseScreen {
                 dropChapter(chapter, mouseX, mouseY);
             }
         };
-        ChapterRows.ChapterRow row = new ChapterRows.ChapterRow(width, chapter, isSelected, collapsed, () -> selectChapter(chapter.id()), editing);
-        panel.add(row, collapsed ? Math.max(0, (width - row.getWidth()) / 2) : 0, y);
+        ChapterRows.ChapterRow row = new ChapterRows.ChapterRow(width - indent, chapter, isSelected, collapsed, () -> selectChapter(chapter.id()),
+                editing);
+        panel.add(row, collapsed ? Math.max(0, (width - row.getWidth()) / 2) : indent, y);
         return y + row.getHeight() + (collapsed ? 2 : 1);
     }
 
@@ -421,17 +423,30 @@ public final class QuestBookScreen extends BaseScreen {
         }
     }
 
-    // A group's heading dragged onto another: it goes just before that group.
+    // A group's heading dragged onto another: onto its right half, it goes into that group (last); onto its left
+    // half, just before it, beside it in the tree.
     private void dropGroup(ChapterGroup moving, double mouseX, double mouseY) {
-        if (list == null) {
+        ChapterRows.GroupRow row = groupRowAt(mouseX, mouseY);
+        if (row == null || row.group().id().equals(moving.id())) {
             return;
         }
+        if (row.nestsAt(mouseX)) {
+            EditActions.nestGroup(moving.id(), row.group().id());
+        } else {
+            EditActions.placeGroup(moving.id(), row.group().id());
+        }
+    }
+
+    private ChapterRows.@Nullable GroupRow groupRowAt(double mouseX, double mouseY) {
+        if (list == null || !list.isMouseOver(mouseX, mouseY)) {
+            return null;
+        }
         for (var child : list.children()) {
-            if (child instanceof ChapterRows.GroupRow row && row.isMouseOver(mouseX, mouseY) && !row.group().id().equals(moving.id())) {
-                EditActions.placeGroup(moving.id(), row.group().id());
-                return;
+            if (child instanceof ChapterRows.GroupRow row && row.isMouseOver(mouseX, mouseY)) {
+                return row;
             }
         }
+        return null;
     }
 
     // ---- search ----
@@ -618,6 +633,16 @@ public final class QuestBookScreen extends BaseScreen {
             return;
         }
         HibiscusTheme theme = HibiscusTheme.current();
+        // Where a dragged group would go: an outline round the heading it would go into, or a line above the one
+        // it would go before.
+        ChapterRows.GroupRow target = draggingGroup == null ? null : groupRowAt(dragX, dragY);
+        if (target != null && !target.group().id().equals(draggingGroup)) {
+            if (target.nestsAt(dragX)) {
+                graphics.outline(target.getX(), target.getY(), target.getWidth(), target.getHeight(), QuestDraw.accent());
+            } else {
+                graphics.fill(target.getX(), target.getY() - 1, target.getRight(), target.getY() + 1, QuestDraw.accent());
+            }
+        }
         Component title = draggingLabel;
         int width = font.width(title) + 8;
         int x = (int) dragX + 6;
@@ -660,6 +685,7 @@ public final class QuestBookScreen extends BaseScreen {
             return true;
         }
         draggingLabel = null;
+        draggingGroup = null;
         return super.mouseReleased(event);
     }
 
@@ -747,6 +773,26 @@ public final class QuestBookScreen extends BaseScreen {
 
     public void fitMap() {
         canvas.fit();
+    }
+
+    public void setGroupFolded(String id, boolean folded) {
+        ClientBook.book().groupTree().group(id).ifPresent(group -> {
+            BookUiState.setFolded(id, folded, group.collapsed());
+            rebuildWidgets();
+        });
+    }
+
+    // A group's menu, opened by its heading (edit mode).
+    public void showGroupMenu(String id) {
+        if (list == null) {
+            return;
+        }
+        for (var child : list.children()) {
+            if (child instanceof ChapterRows.GroupRow row && row.group().id().equals(id)) {
+                menus.groupMenu(row.group(), row.getX() + row.getWidth() / 2, row.getY() + row.getHeight() / 2);
+                return;
+            }
+        }
     }
 
     public void typeSearch(String text) {

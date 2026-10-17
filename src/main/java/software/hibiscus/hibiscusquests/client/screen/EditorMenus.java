@@ -21,6 +21,7 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import software.hibiscus.hibiscuslib.client.gui.Icon;
 import software.hibiscus.hibiscuslib.client.gui.popup.ConfirmDialog;
@@ -38,6 +39,7 @@ import software.hibiscus.hibiscusquests.book.CanvasElements.QuestLink;
 import software.hibiscus.hibiscusquests.book.Chapter;
 import software.hibiscus.hibiscusquests.book.ChapterGroup;
 import software.hibiscus.hibiscusquests.book.ChapterInfo;
+import software.hibiscus.hibiscusquests.book.GroupTree;
 import software.hibiscus.hibiscusquests.book.Quest;
 import software.hibiscus.hibiscusquests.book.QuestTask;
 import software.hibiscus.hibiscusquests.client.ClientBook;
@@ -393,11 +395,19 @@ final class EditorMenus {
 
     void groupMenu(ChapterGroup group, int mx, int my) {
         ContextMenu.Builder menu = ContextMenu.builder();
-        menu.add(t("edit_group"), sprite(QuestDraw.EDIT), () -> open(new FormPopup(t("edit_group"), Forms.group(), EditActions.encodeGroup(group),
-                ChapterGroup.CODEC, "", tag -> EditActions.saveGroup(group.id(), tag))));
+        GroupTree tree = ClientBook.book().groupTree();
+        menu.add(t("edit_group"), sprite(QuestDraw.EDIT), () -> open(new FormPopup(t("edit_group"), Forms.group(parentIds(group.id())),
+                EditActions.encodeGroup(group), ChapterGroup.CODEC, "", tag -> EditActions.saveGroup(group.id(), tag))));
         menu.add(t("new_chapter_here"), sprite(QuestDraw.ADD), () -> newChapter(group.id()));
+        menu.add(t("new_group_here"), sprite(QuestDraw.ADD), () -> newGroup(group.id()));
         menu.add(t("move_up"), sprite(QuestDraw.UP), () -> EditActions.stepGroup(group.id(), -1));
         menu.add(t("move_down"), sprite(QuestDraw.DOWN), () -> EditActions.stepGroup(group.id(), 1));
+        menu.add(t("move_into_group"), () -> moveIntoGroup(group));
+        String parent = tree.parent(group.id());
+        if (!parent.isEmpty()) {
+            Component parentTitle = tree.group(parent).map(p -> BookText.titleOr(p.title(), p.id())).orElse(Component.literal(parent));
+            menu.add(t("move_out_of_group", parentTitle), () -> EditActions.moveGroupOut(group.id()));
+        }
         menu.add(t("copy_id"), () -> copyText(group.id()));
         menu.separator();
         menu.addDanger(t("delete_group"), sprite(QuestDraw.DELETE), () -> open(new ConfirmDialog(t("delete_group_title"),
@@ -411,6 +421,12 @@ final class EditorMenus {
 
     private List<String> groupIds() {
         return ClientBook.book().groups().stream().map(ChapterGroup::id).collect(Collectors.toList());
+    }
+
+    // The groups a group may go under: any but itself and those under it ("" for any group, when making one).
+    private List<String> parentIds(String id) {
+        GroupTree tree = ClientBook.book().groupTree();
+        return tree.groups().stream().map(ChapterGroup::id).filter(other -> id.isEmpty() || !tree.isWithin(other, id)).collect(Collectors.toList());
     }
 
     void editChapter(Chapter chapter) {
@@ -428,19 +444,54 @@ final class EditorMenus {
                 tag -> screen.showChapter(EditActions.createChapter(tag))));
     }
 
-    void newGroup() {
+    // A new group, at the top level or under a parent.
+    void newGroup(String parent) {
         CompoundTag start = new CompoundTag();
         start.putString("id", "new_group");
         start.putString("title", t("new_group_title").getString());
-        open(new FormPopup(t("new_group"), Forms.group(), start, ChapterGroup.CODEC, "", EditActions::createGroup));
+        if (!parent.isEmpty()) {
+            start.putString("parent", parent);
+        }
+        open(new FormPopup(t("new_group"), Forms.group(parentIds("")), start, ChapterGroup.CODEC, "", EditActions::createGroup));
+    }
+
+    // Picks the group another goes under: the top level, or any group but itself, those under it and its parent now.
+    private void moveIntoGroup(ChapterGroup group) {
+        GroupTree tree = ClientBook.book().groupTree();
+        String parent = tree.parent(group.id());
+        List<PickerPopup.Entry> entries = new ArrayList<>();
+        if (!parent.isEmpty()) {
+            entries.add(new PickerPopup.Entry("", t("top_level"), null, Icon.NONE));
+        }
+        for (ChapterGroup other : tree.groups()) {
+            if (!tree.isWithin(other.id(), group.id()) && !other.id().equals(parent)) {
+                entries.add(groupEntry(other));
+            }
+        }
+        if (entries.isEmpty()) {
+            return;
+        }
+        open(PickerPopup.of(t("pick_parent"), entries, picked -> EditActions.nestGroup(group.id(), picked)));
+    }
+
+    // A group in a picker: its title, with its id (and the groups it's under) beneath.
+    private static PickerPopup.Entry groupEntry(ChapterGroup group) {
+        GroupTree tree = ClientBook.book().groupTree();
+        List<ChapterGroup> ancestors = tree.ancestors(group.id());
+        MutableComponent detail = Component.empty();
+        for (int n = ancestors.size() - 1; n >= 0; n--) {
+            detail.append(BookText.titleOr(ancestors.get(n).title(), ancestors.get(n).id())).append(" › ");
+        }
+        detail.append(group.id());
+        return new PickerPopup.Entry(group.id(), BookText.titleOr(group.title(), group.id()), detail,
+                group.icon().map(QuestDraw::icon).orElse(Icon.NONE));
     }
 
     private void moveToGroup(Chapter chapter) {
         List<PickerPopup.Entry> entries = new ArrayList<>();
         entries.add(new PickerPopup.Entry("", t("no_group"), null, Icon.NONE));
         for (ChapterGroup group : ClientBook.book().groups()) {
-            entries.add(new PickerPopup.Entry(group.id(), BookText.titleOr(group.title(), group.id()), Component.literal(group.id()),
-                    group.icon().map(QuestDraw::icon).orElse(Icon.NONE)));
+            entries.add(groupEntry(group));
         }
         open(PickerPopup.of(t("pick_group"), entries, picked -> EditActions.placeChapter(chapter.id(), null, picked)));
     }

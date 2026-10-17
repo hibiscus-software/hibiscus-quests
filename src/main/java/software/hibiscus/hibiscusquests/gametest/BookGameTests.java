@@ -73,6 +73,7 @@ final class BookGameTests {
         check(helper, items.get().source().equals(Optional.of(HibiscusQuests.MODID)), "with the namespace that shipped it");
         check(helper, items.get().quests().size() == 3, "and its 3 quests");
         check(helper, book.groups().stream().anyMatch(group -> group.id().equals("demo")), "the demo pack's groups are loaded");
+        check(helper, book.groupTree().parent("demo_outdoors").equals("demo"), "with the nested one under its parent");
         check(helper, items.get().quest("iron").get().tasks().getFirst().id().equals("iron"), "task ids from the file are kept");
         check(helper, book.chapter("test_logic").get().quest("a").get().tasks().getFirst().id().equals("task_1"),
                 "tasks without an id get task_1, task_2...");

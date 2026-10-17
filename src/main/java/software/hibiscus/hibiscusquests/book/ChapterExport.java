@@ -30,7 +30,7 @@ import software.hibiscus.hibiscuslib.util.SnbtFiles;
 // /hibiscusquests export_chapter <chapter> <namespace>: a chapter as a mod ships it, in
 // <server>/hibiscusquests_exports/, ready to copy into the mod's src/main/resources/:
 //   data/<namespace>/hibiscusquests/chapters/<chapter>.snbt
-//   data/<namespace>/hibiscusquests/chapter_groups.snbt      its group, if it has one
+//   data/<namespace>/hibiscusquests/chapter_groups.snbt      its group and the groups above it, if it has one
 //   data/<namespace>/hibiscusquests/reward_tables/<id>.snbt  the tables its rewards roll
 //   assets/<namespace>/lang/<locale>.json                    the pack translations it uses, as the mod's lang files
 public final class ChapterExport {
@@ -50,10 +50,15 @@ public final class ChapterExport {
         CompoundTag chapterTag = PackFiles.encode(chapter.withSource(Optional.empty()), ops);
         write(exports, data.resolve(PackFiles.CHAPTERS).resolve(chapterId + ".snbt"), chapterTag, written);
 
-        Optional<ChapterGroup> group = book.groups().stream().filter(g -> g.id().equals(chapter.info().group())).findFirst();
-        if (group.isPresent()) {
-            CompoundTag groups = (CompoundTag) ChapterGroup.FILE_CODEC.encodeStart(ops, List.of(group.get())).getOrThrow();
-            write(exports, data.resolve(PackFiles.GROUPS), groups, written);
+        // Its group and every group above it, so it keeps its place in the tree.
+        List<ChapterGroup> groups = new ArrayList<>();
+        book.groupTree().group(chapter.info().group()).ifPresent(group -> {
+            groups.addAll(book.groupTree().ancestors(group.id()).reversed());
+            groups.add(group);
+        });
+        if (!groups.isEmpty()) {
+            CompoundTag groupsTag = (CompoundTag) ChapterGroup.FILE_CODEC.encodeStart(ops, groups).getOrThrow();
+            write(exports, data.resolve(PackFiles.GROUPS), groupsTag, written);
         }
 
         TreeSet<String> tables = new TreeSet<>();
@@ -74,10 +79,10 @@ public final class ChapterExport {
             }
         }
 
-        // The pack translations the chapter (and its group and tables) use, per locale.
+        // The pack translations the chapter (and its groups and tables) use, per locale.
         TreeSet<String> keys = new TreeSet<>();
         collectKeys(chapterTag, book, keys);
-        group.ifPresent(g -> collectKeys((CompoundTag) ChapterGroup.CODEC.encodeStart(ops, g).getOrThrow(), book, keys));
+        groups.forEach(g -> collectKeys((CompoundTag) ChapterGroup.CODEC.encodeStart(ops, g).getOrThrow(), book, keys));
         tableTags.forEach(tag -> collectKeys(tag, book, keys));
         for (Map.Entry<String, Map<String, String>> locale : book.lang().entrySet()) {
             Map<String, String> entries = new TreeMap<>();

@@ -31,12 +31,17 @@ import software.hibiscus.hibiscusquests.client.QuestDraw;
 
 // The rows of the book's chapter list: a group's heading (click to fold it) and a chapter (icon, title, a thin
 // progress bar, a gold dot when rewards wait, a lock while its gate is shut). Collapsed, the list shows icons only.
-// In edit mode a right click asks for the row's menu, a chapter can be dragged onto another row to move it there (and
-// a group's heading onto another heading), and a mod's chapter shows a lock (it's read-only until overridden).
+// A group nested in another is drawn a little further in, with its chapters (indent). In edit mode a right click asks
+// for the row's menu, a chapter can be dragged onto another row to move it there (and a group's heading onto another
+// heading: its left half to go before it, its right half to go into it), and a mod's chapter shows a lock (it's
+// read-only until overridden).
 final class ChapterRows {
     static final int CHAPTER_HEIGHT = 22;
     static final int COLLAPSED_SIZE = 20;
     static final int GROUP_HEIGHT = 14;
+    // How far in each level of groups goes, and the most it's drawn in (deeper levels line up with the last).
+    static final int INDENT = 6;
+    static final int MAX_INDENT = 24;
     private static final int DRAG_THRESHOLD = 4;
 
     // What edit mode adds to a row: its menu, and (chapters) dragging it.
@@ -49,6 +54,11 @@ final class ChapterRows {
     }
 
     private ChapterRows() {}
+
+    // The x offset of a row at a depth in the tree of groups.
+    static int indent(int depth) {
+        return Math.min(depth * INDENT, MAX_INDENT);
+    }
 
     // A group's heading.
     static final class GroupRow extends HibiscusWidget {
@@ -71,6 +81,11 @@ final class ChapterRows {
 
         ChapterGroup group() {
             return group;
+        }
+
+        // Whether a group dropped here at this x goes into this one (the heading's right half) or before it.
+        boolean nestsAt(double mouseX) {
+            return mouseX >= getX() + getWidth() / 2.0;
         }
 
         @Override

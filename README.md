@@ -64,7 +64,9 @@ them as they're made.
   Duplicate, resetting or completing it for your team, and Delete. The quest view has edit buttons too.
 - **Keys:** Ctrl+Z and Ctrl+Y undo and redo; Ctrl+C, Ctrl+X, Ctrl+V and Ctrl+D copy, cut, paste and duplicate (the
   clipboard is text, so it pastes into another world's book too); Ctrl+A selects all; Delete deletes.
-- **The chapter list:** right-click a chapter or group to edit, move or delete it, or drag it into place. The buttons
+- **The chapter list:** right-click a chapter or group to edit, move or delete it, or drag it into place. Drop a
+  group's heading on the right half of another heading to put it inside that group (the left half puts it just
+  before), or use Move into group… and Move out in the group's menu. The buttons
   under the list add a chapter or group and open the reward tables and the book's settings. A deleted chapter's file
   goes to `.trash/` in the pack's folder.
 - **Mods' chapters** show a lock: they're read-only until you **Override** one, which copies it into the pack's files.
@@ -84,6 +86,7 @@ The book lives in `config/hibiscusquests/` (a world's `serverconfig/hibiscusques
 config/hibiscusquests/
   data.snbt                  book settings
   chapter_groups.snbt        {groups: [{id: "basics", title: "The Basics", icon: "minecraft:crafting_table"}]}
+                             (a group may sit under another: parent: "<group id>")
   chapters/<chapter id>.snbt one chapter per file
   reward_tables/<id>.snbt    reward tables
   lang/<locale>.snbt         translations, {"quests.basics.wood.title": "Punch a Tree", ...}
@@ -169,7 +172,7 @@ Ship your quests in your jar under `data/<your mod id>/hibiscusquests/`, with no
 | `generate_chapter <title>` | editors (`hibiscusquests.editor`) | a new chapter with a quest per item in the container you're looking at |
 | `export_lang <locale>` | editors (`hibiscusquests.editor`) | moves the pack's text into `lang/<locale>.snbt` (and `en_us`) under keys |
 | `export` | ops (`hibiscusquests.admin.export`) | zips the book's files into `hibiscusquests_exports/` |
-| `export_chapter <chapter> <namespace>` | ops (`hibiscusquests.admin.export`) | writes the chapter, its group, tables and translations as a mod ships them, into `hibiscusquests_exports/` |
+| `export_chapter <chapter> <namespace>` | ops (`hibiscusquests.admin.export`) | writes the chapter, its group (and the groups above it), tables and translations as a mod ships them, into `hibiscusquests_exports/` |
 | `import <zip>` | ops (`hibiscusquests.admin.import`) | replaces the book with a zip from `hibiscusquests_exports/` (keeping a zip of the old one) |
 | `cleanup [confirm]` | ops (`hibiscusquests.admin.cleanup`) | counts, then with `confirm` drops, progress for quests no longer in the book |
 

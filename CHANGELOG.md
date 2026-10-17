@@ -22,6 +22,25 @@ date. How to cut a release is in [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [Unreleased]
 
+### Added
+
+- **Nested chapter groups.** A group in `chapter_groups.snbt` can sit under another with `parent: "<group id>"`, as
+  deep as you like, so a mod with many groups can put them all under one heading named after it. `order` places a
+  group among its siblings. The chapter list draws the tree, each level a little further in; a group shows when it or
+  a group under it has a chapter, folding one hides everything under it, and each group remembers its own fold.
+  Search, chapter navigation and the collapsed list follow the tree's order.
+- A `parent` that names no group, or that puts a group inside itself, is a book warning and the group goes to the
+  top level; so does a group whose parent a pack removes (`remove: true`) or disables (`disabled_sources`).
+- The editor: the group form has a Parent field; drop a heading on the right half of another to put it inside that
+  group (the left half still puts it just before); a group's menu has New group in this group…, Move into group… and
+  Move out. The server refuses a parent that isn't a group, or one that would put a group inside itself.
+- `export_chapter` writes the chapter's group and every group above it, with their titles' translations.
+
+### Changed
+
+- Deleting a group in the editor moves its groups and the pack's chapters in it up to its parent (to the top level
+  for a top-level group, as before).
+
 ## [1.0.1] - 2026-10-16
 
 ### Changed

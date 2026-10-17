@@ -34,12 +34,14 @@ import software.hibiscus.hibiscusquests.api.QuestRef;
 import software.hibiscus.hibiscusquests.book.BookManager;
 import software.hibiscus.hibiscusquests.book.BookSources.PackChange;
 import software.hibiscus.hibiscusquests.book.Chapter;
+import software.hibiscus.hibiscusquests.book.ChapterGroup;
 import software.hibiscus.hibiscusquests.book.PackFiles;
 import software.hibiscus.hibiscusquests.book.QuestBook;
 import software.hibiscus.hibiscusquests.edit.BookEdit;
 import software.hibiscus.hibiscusquests.edit.BookEditor;
 import software.hibiscus.hibiscusquests.edit.ChapterGenerator;
 import software.hibiscus.hibiscusquests.edit.EditingMode;
+import software.hibiscus.hibiscusquests.edit.GroupEdits;
 import software.hibiscus.hibiscusquests.edit.Ids;
 import software.hibiscus.hibiscusquests.network.BookPatch;
 import software.hibiscus.hibiscusquests.task.ItemTask;
@@ -180,6 +182,61 @@ final class EditorGameTests {
             check(helper, !apply(server, new BookEdit.Groups(groups)).ok(), "two groups can't share an id");
             check(helper, apply(server, new BookEdit.Settings(snbt("{title: \"Edited Book\"}"))).ok()
                     && BookManager.book().settings().title().equals("Edited Book"), "settings");
+        });
+        helper.succeed();
+    }
+
+    private static ListTag encodeGroups(MinecraftServer server, List<ChapterGroup> groups) {
+        return (ListTag) ChapterGroup.CODEC.listOf().encodeStart(BookManager.ops(server), groups).getOrThrow();
+    }
+
+    private static String parentOf(String group) {
+        return BookManager.book().groupTree().parent(group);
+    }
+
+    // Nesting a group in another and taking it back out, as the editor does (GroupEdits), each undone and redone the
+    // way the editor does it (the old or new list of groups); and the parents the server refuses.
+    static void groupNesting(GameTestHelper helper) throws Exception {
+        withTempPack(helper, (server, pack) -> {
+            ListTag start = new ListTag();
+            start.add(snbt("{id: \"nest_parent\", title: \"Parent\"}"));
+            start.add(snbt("{id: \"nest_child\", title: \"Child\"}"));
+            check(helper, apply(server, new BookEdit.Groups(start)).ok(), "two groups");
+
+            List<ChapterGroup> flat = BookManager.book().groups();
+            List<ChapterGroup> nested = GroupEdits.nest(flat, "nest_child", "nest_parent").orElseThrow();
+            check(helper, apply(server, new BookEdit.Groups(encodeGroups(server, nested))).ok() && parentOf("nest_child").equals("nest_parent"),
+                    "nesting puts the child under the parent");
+            check(helper, Files.readString(pack.resolve(PackFiles.GROUPS)).contains("parent: \"nest_parent\""), "in the pack's file");
+            check(helper, GroupEdits.nest(BookManager.book().groups(), "nest_parent", "nest_child").isEmpty(),
+                    "a group can't go into one under it");
+            check(helper, apply(server, new BookEdit.Groups(encodeGroups(server, flat))).ok() && parentOf("nest_child").isEmpty(), "undo un-nests it");
+            check(helper, apply(server, new BookEdit.Groups(encodeGroups(server, nested))).ok() && parentOf("nest_child").equals("nest_parent"),
+                    "redo nests it again");
+
+            List<ChapterGroup> out = GroupEdits.moveOut(BookManager.book().groups(), "nest_child").orElseThrow();
+            check(helper, apply(server, new BookEdit.Groups(encodeGroups(server, out))).ok() && parentOf("nest_child").isEmpty(),
+                    "moving it out puts it back at the top level");
+            List<String> top = BookManager.book().groupTree().children("").stream().map(ChapterGroup::id).toList();
+            check(helper, top.indexOf("nest_child") == top.indexOf("nest_parent") + 1, "just after its old parent: " + top);
+            check(helper, apply(server, new BookEdit.Groups(encodeGroups(server, nested))).ok() && parentOf("nest_child").equals("nest_parent"),
+                    "and undo puts it back in");
+
+            check(helper, GroupEdits.placeBefore(BookManager.book().groups(), "nest_parent", "nest_child").isEmpty(),
+                    "a group can't go beside one under it");
+            List<ChapterGroup> reordered = GroupEdits.placeBefore(flat, "nest_child", "nest_parent").orElseThrow();
+            check(helper, apply(server, new BookEdit.Groups(encodeGroups(server, reordered))).ok(), "dropping a heading on another still reorders");
+            List<String> reorderedTop = BookManager.book().groupTree().children("").stream().map(ChapterGroup::id).toList();
+            check(helper, reorderedTop.indexOf("nest_child") + 1 == reorderedTop.indexOf("nest_parent"), "putting it just before: " + reorderedTop);
+
+            ListTag unknown = new ListTag();
+            unknown.add(snbt("{id: \"nest_parent\"}"));
+            unknown.add(snbt("{id: \"nest_child\", parent: \"no_such_group\"}"));
+            check(helper, !apply(server, new BookEdit.Groups(unknown)).ok(), "a parent that isn't a group is refused");
+            ListTag cycle = new ListTag();
+            cycle.add(snbt("{id: \"nest_parent\", parent: \"nest_child\"}"));
+            cycle.add(snbt("{id: \"nest_child\", parent: \"nest_parent\"}"));
+            check(helper, !apply(server, new BookEdit.Groups(cycle)).ok(), "so is a group inside itself");
         });
         helper.succeed();
     }

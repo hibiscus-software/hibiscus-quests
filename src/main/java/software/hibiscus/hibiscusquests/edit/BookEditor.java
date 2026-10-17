@@ -9,6 +9,7 @@ package software.hibiscus.hibiscusquests.edit;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,6 +39,7 @@ import software.hibiscus.hibiscusquests.book.CanvasElements.QuestLink;
 import software.hibiscus.hibiscusquests.book.Chapter;
 import software.hibiscus.hibiscusquests.book.ChapterGroup;
 import software.hibiscus.hibiscusquests.book.ChapterInfo;
+import software.hibiscus.hibiscusquests.book.GroupTree;
 import software.hibiscus.hibiscusquests.book.PackFiles;
 import software.hibiscus.hibiscusquests.book.Quest;
 import software.hibiscus.hibiscusquests.book.QuestBook;
@@ -45,7 +47,8 @@ import software.hibiscus.hibiscusquests.book.RewardTable;
 
 // Applies the editor's edits to the pack's book files. A batch is checked whole before anything is written: every
 // value must decode as its file would (so the files stay readable), ids must be valid, and only the pack's own chapters
-// and tables can change (a mod's chapter has to be overridden first, which copies it into the pack). Then the touched
+// and tables can change (a mod's chapter has to be overridden first, which copies it into the pack), and groups can't
+// be put under a group that isn't there or inside themselves. Then the touched
 // files are written (a deleted chapter or table goes to .trash/), and the book is rebuilt and patched on every client.
 public final class BookEditor {
     private BookEditor() {}
@@ -273,6 +276,20 @@ public final class BookEditor {
                 for (ChapterGroup group : groups) {
                     if (!ids.add(group.id())) {
                         throw new Refused(Component.translatable("hibiscusquests.edit.error.duplicate", group.id()));
+                    }
+                }
+                // A parent must be a group, and a group can't end up inside itself; one the batch didn't change is
+                // left as it is (the files may have one that's missing for now, which loading already reports).
+                Map<String, ChapterGroup> before = new HashMap<>();
+                working.groups.orElse(working.book.groups()).forEach(group -> before.put(group.id(), group));
+                Map<String, GroupTree.Problem> problems = GroupTree.problems(groups);
+                for (ChapterGroup group : groups) {
+                    GroupTree.Problem problem = problems.get(group.id());
+                    ChapterGroup old = before.get(group.id());
+                    if (problem != null && (old == null || !old.parent().equals(group.parent()))) {
+                        throw new Refused(problem == GroupTree.Problem.CYCLE
+                                ? Component.translatable("hibiscusquests.edit.error.group_cycle", group.id())
+                                : Component.translatable("hibiscusquests.edit.error.no_parent", group.id(), group.parent()));
                     }
                 }
                 working.groups = Optional.of(groups);

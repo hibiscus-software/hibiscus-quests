@@ -72,6 +72,9 @@ public final class ScreenshotHarness {
     private static final String WORLD = "hibiscusquests_screenshots";
     private static final String TOUR = "demo_tour";
     private static final String WORLD_CHAPTER = "demo_world";
+    // The demo's nested group (Outdoors, under Demo), and its parent.
+    private static final String SUB_GROUP = "demo_outdoors";
+    private static final String PARENT_GROUP = "demo";
 
     private record Step(Runnable action, int waitTicks, @Nullable String shot) {}
 
@@ -320,6 +323,15 @@ public final class ScreenshotHarness {
                 }
             }, 5);
             shot("book_world_" + tag);
+            // The list's tree folded: the nested group, then its parent (which hides it too); then unfolded again.
+            then(() -> withBook(minecraft, screen -> screen.setGroupFolded(SUB_GROUP, true)), 5);
+            shot("list_folded_sub_" + tag);
+            then(() -> withBook(minecraft, screen -> screen.setGroupFolded(PARENT_GROUP, true)), 5);
+            shot("list_folded_parent_" + tag);
+            then(() -> withBook(minecraft, screen -> {
+                screen.setGroupFolded(PARENT_GROUP, false);
+                screen.setGroupFolded(SUB_GROUP, false);
+            }), 5);
             then(() -> showQuest(minecraft, new QuestRef(WORLD_CHAPTER, "zombies")), 5);
             shot("quest_choice_" + tag);
             then(() -> {
@@ -432,6 +444,23 @@ public final class ScreenshotHarness {
         }), 5);
         shot("edit_tables_" + tag);
         then(() -> withBook(minecraft, QuestBookScreen::closePopups), 2);
+        // A group's menu, and taking the nested group out of its parent and back (undo), through the client.
+        then(() -> withBook(minecraft, screen -> screen.showGroupMenu(SUB_GROUP)), 5);
+        shot("edit_group_menu_" + tag);
+        then(() -> withBook(minecraft, screen -> {
+            screen.closePopups();
+            EditActions.moveGroupOut(SUB_GROUP);
+        }), 20);
+        shot("edit_group_out_" + tag);
+        then(() -> {
+            report("moving a group out reaches the book", ClientBook.book().groupTree().parent(SUB_GROUP).isEmpty());
+            report("as a patch, to the server's book", ClientQuestState.hash().equals(QuestSync.bookHash()));
+            ClientEditor.undo();
+        }, 20);
+        then(() -> {
+            report("undo puts it back in its parent", ClientBook.book().groupTree().parent(SUB_GROUP).equals(PARENT_GROUP));
+            report("the client still has the server's book", ClientQuestState.hash().equals(QuestSync.bookHash()));
+        }, 2);
         // Translations: export_lang moves the tour's text into the pack's lang file; the client shows the text (not
         // the key), and the editor saving a translated title changes the translation, not the chapter.
         onServer(minecraft, server -> BookEditor.apply(server, LangExport.edits(server, BookText.DEFAULT_LOCALE).edits()));

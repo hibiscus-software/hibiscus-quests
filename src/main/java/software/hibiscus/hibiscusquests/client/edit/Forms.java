@@ -120,8 +120,16 @@ public final class Forms {
         return fields;
     }
 
-    public static List<Field> group() {
-        return List.of(field("title", FieldHint.text()), field("icon", of(Kind.ICON)), field("collapsed", FieldHint.bool()));
+    // A group's form; parents are the groups it may go under (none leaves the field out).
+    public static List<Field> group(List<String> parents) {
+        List<Field> fields = new ArrayList<>();
+        fields.add(field("title", FieldHint.text()));
+        fields.add(field("icon", of(Kind.ICON)));
+        if (!parents.isEmpty()) {
+            fields.add(field("parent", FieldHint.choice(parents.toArray(String[]::new))));
+        }
+        fields.add(field("collapsed", FieldHint.bool()));
+        return fields;
     }
 
     public static List<Field> settings() {

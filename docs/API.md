@@ -35,7 +35,11 @@ same path. A modpack can also restyle or replace your chapters in its own files,
 book's editor; an op's **Override** copies one into the pack's files to edit it.
 
 Chapter ids are shared by every mod in the book, so prefix yours with your mod id (`arcforge_steelmaking`, not
-`steelmaking`). Quest, task and reward ids only need to be unique within their chapter and quest.
+`steelmaking`). Quest, task and reward ids only need to be unique within their chapter and quest. Group ids are shared
+too: prefix them the same way.
+
+A mod with several groups should put them all under one group named after the mod (`parent: "mymod"` on each, see
+`chapter_groups.snbt` below), so the book's chapter list has one heading for your mod beside the other mods'.
 
 ### The easiest way to write them
 
@@ -48,7 +52,7 @@ Chapter ids are shared by every mod in the book, so prefix yours with your mod i
 
    ```
    data/<your mod id>/hibiscusquests/chapters/<chapter>.snbt
-   data/<your mod id>/hibiscusquests/chapter_groups.snbt       its group, if it has one
+   data/<your mod id>/hibiscusquests/chapter_groups.snbt       its group and the groups above it, if it has one
    data/<your mod id>/hibiscusquests/reward_tables/<id>.snbt   the tables its rewards roll
    assets/<your mod id>/lang/<locale>.json                     its translations, one file per locale
    ```
@@ -119,11 +123,28 @@ of real files; the demo book in `src/main/resources/datapacks/demo/` has working
 }
 ```
 
-`chapter_groups.snbt`:
+`chapter_groups.snbt` lists the headings chapters sit under. A group can sit under another (`parent`, a group id),
+so the list is a tree: a group may hold chapters, groups or both, and `order` places it among the groups with the same
+parent (or among the top-level ones). Folding a group in the book hides everything under it. A `parent` that names no
+group, or that would put a group inside itself, is reported as a warning and the group goes to the top level; so does
+a group whose parent a pack removes or disables.
 
 ```snbt
-{groups: [{id: "mymod", title: "My Mod", icon: "mymod:wrench", order: 10}]}
+{groups: [
+    {id: "mymod", title: "My Mod", icon: "mymod:wrench", order: 10},
+    {id: "mymod_basics", title: "The Basics", icon: "mymod:wrench", order: 0, parent: "mymod"},
+    {id: "mymod_machines", title: "Machines", icon: "mymod:furnace_bricks", order: 1, parent: "mymod"}
+]}
 ```
+
+| Field | Default | |
+|---|---|---|
+| `id` | (required) | `[a-z0-9_]+`, unique in the book |
+| `title` | | text (see Text below) |
+| `icon` | | item id, stack or `{texture: ...}` |
+| `order` | `0` | place among the groups with the same parent |
+| `parent` | (top level) | the id of the group this one sits under |
+| `collapsed` | `false` | folded until the player unfolds it |
 
 #### Quest fields
 

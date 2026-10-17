@@ -42,6 +42,7 @@ import software.hibiscus.hibiscusquests.book.RewardTable;
 import software.hibiscus.hibiscusquests.client.ClientBook;
 import software.hibiscus.hibiscusquests.client.ClientLang;
 import software.hibiscus.hibiscusquests.edit.BookEdit;
+import software.hibiscus.hibiscusquests.edit.GroupEdits;
 import software.hibiscus.hibiscusquests.edit.Ids;
 
 // Everything the editor can do, as edits for the server and the edits that undo them, worked out from the client's
@@ -778,9 +779,8 @@ public final class EditActions {
 
     // The chapters of a group in book order.
     private static List<Chapter> chaptersIn(String group) {
-        List<String> groupIds = book().groups().stream().map(ChapterGroup::id).toList();
         return book().sourceChapters().stream().filter(chapter -> group.isEmpty()
-                ? !groupIds.contains(chapter.info().group()) : chapter.info().group().equals(group)).toList();
+                ? !book().groupTree().contains(chapter.info().group()) : chapter.info().group().equals(group)).toList();
     }
 
     // Puts a chapter just before another (or last in group when before is null), renumbering the pack's chapters of
@@ -839,17 +839,19 @@ public final class EditActions {
     // The chapter's group, or "" when it's in none (or one that doesn't exist).
     public static String groupOf(Chapter chapter) {
         String group = chapter.info().group();
-        return book().groups().stream().anyMatch(g -> g.id().equals(group)) ? group : "";
+        return book().groupTree().contains(group) ? group : "";
     }
 
-    // A new group from its form (its id from its title), last in the list. Returns its id.
+    // A new group from its form (its id from its title), last among its siblings (the top level, unless the form
+    // gives a parent). Returns its id.
     public static String createGroup(CompoundTag form) {
         ListTag groups = encodeGroups(book().groups());
         List<String> taken = book().groups().stream().map(ChapterGroup::id).toList();
         String id = Ids.fromTitle(form.getStringOr("title", ""), "group", taken);
         CompoundTag group = form.copy();
         group.putString("id", id);
-        group.putInt("order", book().groups().stream().mapToInt(ChapterGroup::order).max().orElse(0) + 10);
+        String parent = form.getStringOr("parent", "");
+        group.putInt("order", book().groupTree().children(parent).stream().mapToInt(ChapterGroup::order).max().orElse(0) + 10);
         groups.add(group);
         Change change = new Change();
         change.add(new BookEdit.Groups(groups), new BookEdit.Groups(encodeGroups(book().groups())));
@@ -871,52 +873,52 @@ public final class EditActions {
         change.submit("edit_group");
     }
 
-    // Puts a group just before another, renumbering the groups 10, 20, 30...
+    // Puts a group just before another, beside it in the tree.
     public static void placeGroup(String id, String before) {
-        List<ChapterGroup> groups = new ArrayList<>(book().groups());
-        Optional<ChapterGroup> moving = groups.stream().filter(group -> group.id().equals(id)).findFirst();
-        if (moving.isEmpty()) {
-            return;
-        }
-        groups.remove(moving.get());
-        int index = groups.stream().map(ChapterGroup::id).toList().indexOf(before);
-        groups.add(index < 0 ? groups.size() : index, moving.get());
-        renumberGroups(groups);
+        submitGroups(GroupEdits.placeBefore(book().groups(), id, before), "reorder");
     }
 
-    private static void renumberGroups(List<ChapterGroup> groups) {
-        List<ChapterGroup> renumbered = new ArrayList<>();
-        for (int n = 0; n < groups.size(); n++) {
-            ChapterGroup group = groups.get(n);
-            renumbered.add(new ChapterGroup(group.id(), group.title(), group.icon(), (n + 1) * 10, group.collapsed()));
-        }
-        Change change = new Change();
-        change.add(new BookEdit.Groups(encodeGroups(renumbered)), new BookEdit.Groups(encodeGroups(book().groups())));
-        change.submit("reorder");
+    // Puts a group last under another ("" for the top level).
+    public static void nestGroup(String id, String parent) {
+        submitGroups(GroupEdits.nest(book().groups(), id, parent), "nest_group");
+    }
+
+    // Takes a group out of its parent, to just after it.
+    public static void moveGroupOut(String id) {
+        submitGroups(GroupEdits.moveOut(book().groups(), id), "nest_group");
     }
 
     public static void stepGroup(String id, int by) {
-        List<ChapterGroup> groups = new ArrayList<>(book().groups());
-        int index = groups.stream().map(ChapterGroup::id).toList().indexOf(id);
-        int target = index + by;
-        if (index < 0 || target < 0 || target >= groups.size()) {
-            return;
-        }
-        groups.add(target, groups.remove(index));
-        renumberGroups(groups);
+        submitGroups(GroupEdits.step(book().groups(), id, by), "reorder");
     }
 
-    // Deletes a group; the pack's chapters in it move out of it.
-    public static void deleteGroup(String id) {
-        List<ChapterGroup> groups = new ArrayList<>(book().groups());
-        groups.removeIf(group -> group.id().equals(id));
+    private static void submitGroups(Optional<List<ChapterGroup>> groups, String action) {
+        if (groups.isEmpty()) {
+            return;
+        }
         Change change = new Change();
-        change.add(new BookEdit.Groups(encodeGroups(groups)), new BookEdit.Groups(encodeGroups(book().groups())));
+        change.add(new BookEdit.Groups(encodeGroups(groups.get())), new BookEdit.Groups(encodeGroups(book().groups())));
+        change.submit(action);
+    }
+
+    // Deletes a group; the groups and the pack's chapters in it move up to its parent.
+    public static void deleteGroup(String id) {
+        Optional<List<ChapterGroup>> groups = GroupEdits.delete(book().groups(), id);
+        if (groups.isEmpty()) {
+            return;
+        }
+        String parent = book().groupTree().parent(id);
+        Change change = new Change();
+        change.add(new BookEdit.Groups(encodeGroups(groups.get())), new BookEdit.Groups(encodeGroups(book().groups())));
         for (Chapter chapter : book().sourceChapters()) {
             if (chapter.source().isEmpty() && chapter.info().group().equals(id)) {
                 CompoundTag old = encodeInfo(chapter.info());
                 CompoundTag info = old.copy();
-                info.remove("group");
+                if (parent.isEmpty()) {
+                    info.remove("group");
+                } else {
+                    info.putString("group", parent);
+                }
                 change.add(new BookEdit.ChapterInfo(chapter.id(), Optional.of(info)), new BookEdit.ChapterInfo(chapter.id(), Optional.of(old)));
             }
         }

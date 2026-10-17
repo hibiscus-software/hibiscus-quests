@@ -7,6 +7,13 @@
             order: 0
         },
         {
+            id: "demo_outdoors",
+            title: "Outdoors",
+            icon: "minecraft:compass",
+            order: 10,
+            parent: "demo"
+        },
+        {
             id: "tests",
             title: "Gametests",
             icon: "minecraft:command_block",

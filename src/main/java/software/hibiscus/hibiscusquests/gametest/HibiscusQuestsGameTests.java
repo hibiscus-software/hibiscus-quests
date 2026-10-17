@@ -69,6 +69,10 @@ public final class HibiscusQuestsGameTests {
         add("progress_round_trip", BookGameTests::progressRoundTrip);
         add("sync_round_trip", BookGameTests::syncRoundTrip);
         add("api", BookGameTests::api);
+        add("group_nesting", GroupGameTests::nesting);
+        add("group_bad_parents", GroupGameTests::badParents);
+        add("group_rows", GroupGameTests::rows);
+        add("group_removed_parent", GroupGameTests::removedParent);
         add("task_item_detect", TaskGameTests::itemDetect);
         add("task_item_consume", TaskGameTests::itemConsume);
         add("task_checkmark", TaskGameTests::checkmark);
@@ -109,6 +113,7 @@ public final class HibiscusQuestsGameTests {
         add(EDITOR_TESTS, "editor_edits", EditorGameTests::edits);
         add(EDITOR_TESTS, "editor_override", EditorGameTests::override);
         add(EDITOR_TESTS, "editor_tables_groups_settings", EditorGameTests::tablesGroupsSettings);
+        add(EDITOR_TESTS, "editor_group_nesting", EditorGameTests::groupNesting);
         add(EDITOR_TESTS, "editor_permission", EditorGameTests::permission);
         add(EDITOR_TESTS, "editor_generate_chapter", EditorGameTests::generate);
         add(EDITOR_TESTS, "pack_lang", PackGameTests::lang);

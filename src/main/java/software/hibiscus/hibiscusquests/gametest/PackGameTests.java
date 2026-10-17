@@ -27,6 +27,7 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.TagParser;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -206,14 +207,25 @@ final class PackGameTests {
         Path exports = PackArchive.exportsDirectory(server);
         withTempPack(helper, (srv, pack) -> {
             makeChapter(server);
+            // In a group under another, so the export takes both.
+            ListTag groups = new ListTag();
+            groups.add(snbt("{id: \"export_parent\", title: \"Export Parent\"}"));
+            groups.add(snbt("{id: \"export_child\", title: \"Export Child\", parent: \"export_parent\"}"));
+            check(helper, apply(server, new BookEdit.Groups(groups),
+                    new BookEdit.ChapterInfo(CHAPTER, Optional.of(snbt("{title: \"Pack Test\", group: \"export_child\"}")))).ok(), "the chapter's groups");
             BookEditor.apply(server, LangExport.edits(server, BookText.DEFAULT_LOCALE).edits());
             ChapterExport.Result result = ChapterExport.export(server, CHAPTER, "mymod");
             Path data = exports.resolve("data/mymod/hibiscusquests");
             check(helper, Files.isRegularFile(data.resolve("chapters/" + CHAPTER + ".snbt")), "the chapter's file");
             check(helper, Files.isRegularFile(data.resolve("reward_tables/pack_table.snbt")), "the table its reward rolls");
+            String groupsFile = Files.readString(data.resolve(PackFiles.GROUPS));
+            check(helper, groupsFile.contains("\"export_child\"") && groupsFile.contains("\"export_parent\"")
+                    && groupsFile.contains("parent: \"export_parent\""), "its group and the group above it, still nested");
             Path lang = exports.resolve("assets/mymod/lang/en_us.json");
-            check(helper, Files.isRegularFile(lang) && Files.readString(lang).contains("quests." + CHAPTER + ".first.title"),
-                    "and its translations as the mod's lang file");
+            String langFile = Files.isRegularFile(lang) ? Files.readString(lang) : "";
+            check(helper, langFile.contains("quests." + CHAPTER + ".first.title"), "and its translations as the mod's lang file");
+            check(helper, langFile.contains("quests.group.export_child.title") && langFile.contains("quests.group.export_parent.title"),
+                    "both groups' titles among them");
             check(helper, result.files().size() >= 3, "listed for the command: " + result.files());
         });
         cleanExports(exports);

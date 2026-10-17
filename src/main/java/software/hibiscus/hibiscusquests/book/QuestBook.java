@@ -24,8 +24,8 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import software.hibiscus.hibiscusquests.api.QuestRef;
 import software.hibiscus.hibiscusquests.api.book.BookView;
 
-// The whole book after merging mod-provided chapters with the pack's files: settings, groups and chapters in book
-// order, with the indexes the progress logic needs (quests by reference, who depends on whom, one_of branches,
+// The whole book after merging mod-provided chapters with the pack's files: settings, groups (as a tree, GroupTree)
+// and chapters in book order, with the indexes the progress logic needs (quests by reference, who depends on whom, one_of branches,
 // chapter gates). Immutable; a reload or edit builds a new one. The same class is used on the client, decoded from
 // the network form.
 public final class QuestBook implements BookView {
@@ -48,7 +48,7 @@ public final class QuestBook implements BookView {
     public record Requirement(Optional<String> chapter, Optional<QuestRef> quest) {}
 
     private final BookSettings settings;
-    private final List<ChapterGroup> groups;
+    private final GroupTree groupTree;
     private final List<Chapter> chapters;
     // The chapters as they were given, before dependencies that point nowhere were dropped: what's sent to clients and
     // what the editor edits, so a dependency on a quest that's missing for now comes back with the quest.
@@ -62,7 +62,7 @@ public final class QuestBook implements BookView {
     private final Map<String, RewardTable> tables;
     private final Map<String, Map<String, String>> lang;
 
-    private QuestBook(BookSettings settings, List<ChapterGroup> groups, List<Chapter> chapters, List<Chapter> sourceChapters,
+    private QuestBook(BookSettings settings, GroupTree groupTree, List<Chapter> chapters, List<Chapter> sourceChapters,
             Map<QuestRef, Quest> quests, Map<String, List<Requirement>> chapterRequirements, Map<String, RewardTable> tables,
             Map<String, Map<String, String>> lang) {
         Map<String, Map<String, String>> langCopy = new LinkedHashMap<>();
@@ -74,7 +74,7 @@ public final class QuestBook implements BookView {
         this.sourceById = Collections.unmodifiableMap(sources);
         this.tables = Collections.unmodifiableMap(tables);
         this.settings = settings;
-        this.groups = List.copyOf(groups);
+        this.groupTree = groupTree;
         this.chapters = List.copyOf(chapters);
         Map<String, Chapter> byId = new LinkedHashMap<>();
         chapters.forEach(chapter -> byId.put(chapter.id(), chapter));
@@ -108,8 +108,9 @@ public final class QuestBook implements BookView {
         this.oneOfSiblings = Map.copyOf(siblings);
     }
 
-    // Builds the book from decoded parts: sorts groups and chapters, drops duplicate quests and dependencies or
-    // gates that point nowhere (each reported to warnings), and indexes everything.
+    // Builds the book from decoded parts: sorts groups (into their tree) and chapters, drops duplicate quests and
+    // dependencies or gates that point nowhere and sets aside group parents that can't be used (each reported to
+    // warnings), and indexes everything.
     public static QuestBook build(BookSettings settings, List<ChapterGroup> groups, List<Chapter> chapters, List<RewardTable> rewardTables,
             Consumer<String> warnings) {
         return build(settings, groups, chapters, rewardTables, Map.of(), warnings);
@@ -117,14 +118,15 @@ public final class QuestBook implements BookView {
 
     public static QuestBook build(BookSettings settings, List<ChapterGroup> groups, List<Chapter> chapters, List<RewardTable> rewardTables,
             Map<String, Map<String, String>> lang, Consumer<String> warnings) {
-        List<ChapterGroup> sortedGroups = new ArrayList<>(groups);
-        sortedGroups.sort(Comparator.comparingInt(ChapterGroup::order).thenComparing(ChapterGroup::id));
+        GroupTree tree = GroupTree.of(groups, warnings);
+        List<ChapterGroup> sortedGroups = tree.groups();
         Map<String, Integer> groupRank = new HashMap<>();
         for (int n = 0; n < sortedGroups.size(); n++) {
             groupRank.put(sortedGroups.get(n).id(), n);
         }
         List<Chapter> sortedChapters = new ArrayList<>(chapters);
-        // Ungrouped chapters (and those naming a group that doesn't exist) come first.
+        // Ungrouped chapters (and those naming a group that doesn't exist) come first, then each group's in the tree's
+        // order: a group's own chapters, then the groups under it.
         sortedChapters.sort(Comparator.<Chapter>comparingInt(chapter -> groupRank.getOrDefault(chapter.info().group(), -1))
                 .thenComparingInt(chapter -> chapter.info().order())
                 .thenComparing(Chapter::id));
@@ -198,7 +200,7 @@ public final class QuestBook implements BookView {
                 }
             }
         }
-        return new QuestBook(settings, sortedGroups, cleanedChapters, sortedChapters, quests, requirements, tables, lang);
+        return new QuestBook(settings, tree, cleanedChapters, sortedChapters, quests, requirements, tables, lang);
     }
 
     // The pack's translations (lang/<locale>.snbt), locale to key to text.
@@ -224,8 +226,13 @@ public final class QuestBook implements BookView {
         return settings;
     }
 
+    // The groups as their files give them (parents included even when they're set aside), in the tree's order.
     public List<ChapterGroup> groups() {
-        return groups;
+        return groupTree.groups();
+    }
+
+    public GroupTree groupTree() {
+        return groupTree;
     }
 
     @Override
